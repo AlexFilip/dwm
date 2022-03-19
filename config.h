@@ -87,7 +87,7 @@ static Key keys[] = {
     { MODKEY,                       XK_e,      spawn,          { .v = editorcmd } },
     { MODKEY,                       XK_b,      spawn,          { .v = browsercmd } },
     { MODKEY,                       XK_p,      spawn,          { .v = htopcmd } },
-    // { MODKEY,                       XK_f,      setlayout,      { 0 } },
+    { MODKEY,                       XK_f,      toggle_layout,  { 0 } },
 
     { MODKEY,                       XK_h,      focusstack,     {.i = -1 } },
     { MODKEY,                       XK_l,      focusstack,     {.i = +1 } },

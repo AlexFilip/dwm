@@ -229,6 +229,7 @@ static void setclientstate(Client *client, long state);
 static void setfocus(Client *client);
 static void setfullscreen(Client *client, int fullscreen);
 static void setlayout(const Arg *arg);
+static void toggle_layout(const Arg *arg);
 static void setmfact(const Arg *arg);
 static void setup(void);
 static void seturgent(Client *client, int urg);
@@ -443,14 +444,14 @@ void attachstack(Client *client) {
 }
 
 void buttonpress(XEvent *event) {
-    unsigned int i, x, click;
+    unsigned int i, x;
     Arg arg = {0};
     Client *client;
     Monitor *monitor;
     XButtonPressedEvent *ev = &event->xbutton;
  	char *text, *s, ch;
 
-    click = ClkRootWin;
+    unsigned int click = ClkRootWin;
     /* focus monitor if necessary */
     if ((monitor = wintomon(ev->window)) && monitor != selected_monitor) {
         unfocus(selected_monitor->selected_client, 1);
@@ -1600,6 +1601,20 @@ void setlayout(const Arg *arg) {
     } else {
         drawbar(selected_monitor);
     }
+}
+
+void toggle_layout(const Arg *arg) {
+    Arg layout_arg = {0};
+    const Layout *current_layout = selected_monitor->layouts[selected_monitor->selected_layout];
+
+    // Toggle between tiled and monocle (fullscreen-like layout)
+    if(current_layout == &layouts[0]) {
+        layout_arg.v = &layouts[2];
+    } else {
+        layout_arg.v = &layouts[0];
+    }
+
+    setlayout(&layout_arg);
 }
 
 /* arg > 1.0 will set mfact absolutely */
