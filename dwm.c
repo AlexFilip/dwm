@@ -457,17 +457,26 @@ void buttonpress(XEvent *event) {
         selected_monitor = monitor;
         focus(NULL);
     }
+
     if (ev->window == selected_monitor->barwin) {
         i = x = 0;
-        do
-            x += TEXTW(tags[i]);
-        while (ev->x >= x && ++i < ArrayLength(tags));
+
+        int occupied = 0;
+        for (client = monitor->clients; client; client = client->next) {
+            occupied |= client->tags;
+        }
+
+        do {
+            if (occupied & (1 << i)) { 
+                x += TEXTW(tags[i]);
+            }
+        } while (ev->x >= x && ++i < ArrayLength(tags));
         if (i < ArrayLength(tags)) {
             click = ClkTagBar;
             arg.ui = 1 << i;
-        } else if (ev->x < x + blw)
+        } else if (ev->x < x + blw) {
             click = ClkLtSymbol;
-        else if (ev->x > selected_monitor->window_width - statusw) {
+        } else if (ev->x > selected_monitor->window_width - statusw) {
             x = selected_monitor->window_width - statusw;
             click = ClkStatusText;
             statussig = 0;
@@ -492,6 +501,7 @@ void buttonpress(XEvent *event) {
         XAllowEvents(global_display, ReplayPointer, CurrentTime);
         click = ClkClientWin;
     }
+
     for (i = 0; i < ArrayLength(buttons); i++)
         if (click == buttons[i].click && buttons[i].func && buttons[i].button == ev->button
         && CleanMask(buttons[i].mask) == CleanMask(ev->state))
@@ -748,6 +758,7 @@ void drawbar(Monitor *monitor) {
         if (client->isurgent)
             urg |= client->tags;
     }
+
     x = 0;
     for (i = 0; i < ArrayLength(tags); i++) {
         int monitor_is_selected = monitor->tagset[monitor->selected_tags] & (1 << i);
@@ -2111,9 +2122,12 @@ void updatewmhints(Client *client) {
 void view(const Arg *arg) {
     if ((arg->ui & TagMask) == selected_monitor->tagset[selected_monitor->selected_tags])
         return;
+
     selected_monitor->selected_tags ^= 1; /* toggle sel tagset */
+
     if (arg->ui & TagMask)
         selected_monitor->tagset[selected_monitor->selected_tags] = arg->ui & TagMask;
+
     focus(NULL);
     arrange(selected_monitor);
 }
