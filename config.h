@@ -12,13 +12,14 @@ static const char col_gray2[]       = "#444444";
 static const char col_gray3[]       = "#bbbbbb";
 static const char col_gray4[]       = "#eeeeee";
 static const char col_cyan[]        = "#005577";
+static const char col_selected[]    = "#fa2106";
 
 static int gap_size                 = 6;        /* gaps between windows */
 
 static const char *colors[][3]      = {
-    /*               fg         bg         border   */
-    [SchemeNorm] = { col_gray3, col_gray1, col_gray2 },
-    [SchemeSel]  = { col_gray4, col_cyan,  col_cyan  },
+    /*               fg             bg         border   */
+    [SchemeNorm] = { col_gray3,     col_gray1, col_gray2 },
+    [SchemeSel]  = { col_selected,  col_gray1, col_cyan  },
 
 };
 
@@ -38,7 +39,7 @@ static const Rule rules[] = {
 };
 
 /* layout(s) */
-static const float mfact     = 0.55; /* factor of master area size [0.05..0.95] */
+static const float mfact     = 0.55f; /* factor of master area size [0.05..0.95] */
 static const int nmaster     = 1;    /* number of clients in master area */
 static const int resizehints = 0;    /* 1 means respect size hints in tiled resizals */
 static const int lockfullscreen = 1; /* 1 will force focus on the fullscreen window */
@@ -72,25 +73,26 @@ static const char* brightness_up[]   = { "~/bin/backlight" "+1", NULL };
 static const char* brightness_down[] = { "~/bin/backlight" "-1", NULL };
 
 /* commands */
-static       char    dmenumon[2] = "0"; /* component of dmenucmd, manipulated in spawn() */
-static const char*   dmenucmd[ ] = { "dmenu_run", "-m", dmenumon, "-fn", dmenufont, "-nb", col_gray1, "-nf", col_gray3, "-sb", col_cyan, "-sf", col_gray4, NULL };
-static const char*    termcmd[ ] = { "st", NULL };
-static const char*  editorcmd[ ] = { "st", "nvim", NULL };
-static const char* browsercmd[ ] = { "brave-browser", "--profile-directory=Personal", NULL };
-static const char*    htopcmd[ ] = { "st", "htop", NULL };
+static char          dmenumon[2] = "0"; /* component of dmenucmd, manipulated in spawn() */
+static char const*   dmenucmd[ ] = { "dmenu_run", "-m", dmenumon, "-fn", dmenufont, "-nb", col_gray1, "-nf", col_gray3, "-sb", col_cyan, "-sf", col_gray4, NULL };
+static char const*    termcmd[ ] = { "st", NULL };
+static char const*  editorcmd[ ] = { "st", "nvim", NULL };
+static char const* browsercmd[ ] = { "brave-browser", "--profile-directory=Personal", NULL };
+static char const*    htopcmd[ ] = { "st", "htop", NULL };
 
 static Key keys[] = {
     /* modifier                     key        function        argument */
-    { MODKEY,                       XK_space,  spawn,          {.v = dmenucmd } },
-    { MODKEY,                       XK_t,      spawn,          {.v = termcmd } },
-    { MODKEY,                       XK_e,      spawn,          {.v = editorcmd } },
-    { MODKEY,                       XK_b,      spawn,          {.v = browsercmd } },
-    { MODKEY,                       XK_p,      spawn,          {.v = htopcmd } },
-    // { MODKEY,                       XK_f,      togglebar,      {0} },
+    { MODKEY,                       XK_space,  spawn,          { .v = dmenucmd } },
+    { MODKEY,                       XK_t,      spawn,          { .v = termcmd } },
+    { MODKEY,                       XK_e,      spawn,          { .v = editorcmd } },
+    { MODKEY,                       XK_b,      spawn,          { .v = browsercmd } },
+    { MODKEY,                       XK_p,      spawn,          { .v = htopcmd } },
+    // { MODKEY,                       XK_f,      setlayout,      { 0 } },
+
     { MODKEY,                       XK_h,      focusstack,     {.i = -1 } },
     { MODKEY,                       XK_l,      focusstack,     {.i = +1 } },
-    { MODKEY,                       XK_j,      setmfact,       {.f = -0.05} },
-    { MODKEY,                       XK_k,      setmfact,       {.f = +0.05} },
+    { MODKEY,                       XK_j,      setmfact,       {.f = -0.05f} },
+    { MODKEY,                       XK_k,      setmfact,       {.f = +0.05f} },
     // { MODKEY,                       XK_i,      incnmaster,     {.i = +1 } },
     // { MODKEY,                       XK_d,      incnmaster,     {.i = -1 } },
 
@@ -104,6 +106,7 @@ static Key keys[] = {
 
     // { MODKEY,                       XK_space,  setlayout,      {0} },
     // { MODKEY|ShiftMask,             XK_space,  togglefloating, {0} },
+
     { MODKEY,                       XK_comma,  focusmon,       {.i = -1 } },
     { MODKEY,                       XK_period, focusmon,       {.i = +1 } },
     { MODKEY|ShiftMask,             XK_comma,  tagmon,         {.i = -1 } },
@@ -121,8 +124,8 @@ static Key keys[] = {
     TAGKEYS(                        XK_7,                      6)
     TAGKEYS(                        XK_8,                      7)
     TAGKEYS(                        XK_9,                      8)
-    { MODKEY|ShiftMask,             XK_q,      quit,           {0} },
 
+    { MODKEY|ShiftMask,             XK_q,      quit,           {0} },
     { MODKEY,                       XK_y,      change_gap,     { .i = +1 } },
     { MODKEY|ShiftMask,             XK_y,      change_gap,     { .i = -1 } },
 

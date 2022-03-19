@@ -2,8 +2,8 @@
 
 #include <stdint.h>
 
-#define MAX(A, B)               ((A) > (B) ? (A) : (B))
-#define MIN(A, B)               ((A) < (B) ? (A) : (B))
+#define Maximum(A, B)               ((A) > (B) ? (A) : (B))
+#define Minimum(A, B)               ((A) < (B) ? (A) : (B))
 #define Between(Val, Min, Max)  (((uint64_t)((Val) - (Min))) <= ((Max) - (Min)))
 
 void die(const char *fmt, ...);

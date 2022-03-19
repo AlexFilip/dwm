@@ -1,4 +1,4 @@
 #!/bin/bash
 
-clang -o dwm dwm.c drw.c util.c -std=c99 -pedantic -Wall -Wno-deprecated-declarations -Os -I/usr/X11R6/include -I/usr/include/freetype2 -D_DEFAULT_SOURCE -D_BSD_SOURCE -D_POSIX_C_SOURCE=200809L -DVERSION=\"6.2\" -DXINERAMA -L/usr/X11R6/lib -lX11 -lXinerama -lfontconfig -lXft
+clang -g -o dwm dwm.c drw.c util.c -std=c99 -pedantic -Wall -Wno-deprecated-declarations -Os -I/usr/X11R6/include -I/usr/include/freetype2 -D_DEFAULT_SOURCE -D_BSD_SOURCE -D_POSIX_C_SOURCE=200809L -DVERSION=\"6.2\" -DXINERAMA -L/usr/X11R6/lib -lX11 -lXinerama -lfontconfig -lXft
 # make

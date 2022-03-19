@@ -59,16 +59,16 @@
 #include "util.h"
 
 /* macros */
-#define BUTTONMASK              (ButtonPressMask|ButtonReleaseMask)
-#define CLEANMASK(mask)         (mask & ~(numlockmask|LockMask) & (ShiftMask|ControlMask|Mod1Mask|Mod2Mask|Mod3Mask|Mod4Mask|Mod5Mask))
-#define Intersect(x, y, width, height, monitor) (MAX(0, MIN((x)+(width),(monitor)->window_x+(monitor)->window_width) - MAX((x),(monitor)->window_x)) \
-                                                 * MAX(0, MIN((y)+(height),(monitor)->window_y+(monitor)->window_height) - MAX((y),(monitor)->window_y)))
-#define IsVisible(C)            ((C->tags & C->monitor->tagset[C->monitor->seltags]))
+#define ButtonMask              (ButtonPressMask|ButtonReleaseMask)
+#define CleanMask(mask)         (mask & ~(numlockmask|LockMask) & (ShiftMask|ControlMask|Mod1Mask|Mod2Mask|Mod3Mask|Mod4Mask|Mod5Mask))
+#define Intersect(x, y, width, height, monitor) (Maximum(0, Minimum((x)+(width),(monitor)->window_x+(monitor)->window_width) - Maximum((x),(monitor)->window_x)) \
+                                                 * Maximum(0, Minimum((y)+(height),(monitor)->window_y+(monitor)->window_height) - Maximum((y),(monitor)->window_y)))
+#define IsVisible(C)            ((C->tags & C->monitor->tagset[C->monitor->selected_tags]))
 #define ArrayLength(X)          (sizeof(X) / sizeof((X)[0]))
-#define MOUSEMASK               (BUTTONMASK|PointerMotionMask)
+#define MouseMask               (ButtonMask|PointerMotionMask)
 #define ClientWidth(X)          ((X)->width + 2 * (X)->border_width + gap_size)
 #define ClientHeight(X)         ((X)->height + 2 * (X)->border_width + gap_size)
-#define TAGMASK                 ((1 << ArrayLength(tags)) - 1)
+#define TagMask                 ((1 << ArrayLength(tags)) - 1)
 #define TEXTW(X)                (drw_fontset_getwidth(drw, (X)) + lrpad)
 
 /* enums */
@@ -145,7 +145,7 @@ struct Monitor {
     int bar_height;               /* bar geometry */
     int screen_x, screen_y, screen_width, screen_height;   /* screen size */
     int window_x, window_y, window_width, window_height;   /* window area  */
-    unsigned int seltags;
+    unsigned int selected_tags;
     unsigned int selected_layout;
     unsigned int tagset[2];
     int showbar;
@@ -347,7 +347,7 @@ void applyrules(Client *client) {
         XFree(ch.res_class);
     if (ch.res_name)
         XFree(ch.res_name);
-    client->tags = client->tags & TAGMASK ? client->tags & TAGMASK : client->monitor->tagset[client->monitor->seltags];
+    client->tags = client->tags & TagMask ? client->tags & TagMask : client->monitor->tagset[client->monitor->selected_tags];
 }
 
 int applysizehints(Client *client, int *x, int *y, int *width, int *height, int interact) {
@@ -355,8 +355,8 @@ int applysizehints(Client *client, int *x, int *y, int *width, int *height, int 
     Monitor *monitor = client->monitor;
 
     /* set minimum possible */
-    *width = MAX(1, *width);
-    *height = MAX(1, *height);
+    *width = Maximum(1, *width);
+    *height = Maximum(1, *height);
     if (interact) {
         if (*x > sw)
             *x = sw - ClientWidth(client);
@@ -404,12 +404,12 @@ int applysizehints(Client *client, int *x, int *y, int *width, int *height, int 
         if (client->inc_height)
             *height -= *height % client->inc_height;
         /* restore base dimensions */
-        *width = MAX(*width + client->base_width, client->min_width);
-        *height = MAX(*height + client->base_height, client->min_height);
+        *width = Maximum(*width + client->base_width, client->min_width);
+        *height = Maximum(*height + client->base_height, client->min_height);
         if (client->max_width)
-            *width = MIN(*width, client->max_width);
+            *width = Minimum(*width, client->max_width);
         if (client->max_height)
-            *height = MIN(*height, client->max_height);
+            *height = Minimum(*height, client->max_height);
     }
     return *x != client->x || *y != client->y || *width != client->width || *height != client->height;
 }
@@ -494,7 +494,7 @@ void buttonpress(XEvent *event) {
     }
     for (i = 0; i < ArrayLength(buttons); i++)
         if (click == buttons[i].click && buttons[i].func && buttons[i].button == ev->button
-        && CLEANMASK(buttons[i].mask) == CLEANMASK(ev->state))
+        && CleanMask(buttons[i].mask) == CleanMask(ev->state))
             buttons[i].func(click == ClkTagBar && buttons[i].arg.i == 0 ? &arg : &buttons[i].arg);
 }
 
@@ -656,7 +656,7 @@ void configurerequest(XEvent *event) {
     XSync(global_display, False);
 }
 
-Monitor * createmon(void) {
+Monitor *createmon(void) {
     Monitor *monitor;
 
     monitor = ecalloc(1, sizeof(Monitor));
@@ -715,7 +715,7 @@ void drawbar(Monitor *monitor) {
     int x, width, tw = 0;
     int boxs = drw->fonts->height / 9;
     int boxw = drw->fonts->height / 6 + 2;
-    unsigned int i, occ = 0, urg = 0;
+    unsigned int i, occupied = 0, urg = 0;
     Client *client;
 
     if (!monitor->showbar)
@@ -744,28 +744,36 @@ void drawbar(Monitor *monitor) {
     }
 
     for (client = monitor->clients; client; client = client->next) {
-        occ |= client->tags;
+        occupied |= client->tags;
         if (client->isurgent)
             urg |= client->tags;
     }
     x = 0;
     for (i = 0; i < ArrayLength(tags); i++) {
-        width = TEXTW(tags[i]);
-        drw_setscheme(drw, scheme[monitor->tagset[monitor->seltags] & 1 << i ? SchemeSel : SchemeNorm]);
-        drw_text(drw, x, 0, width, bh, lrpad / 2, tags[i], urg & 1 << i);
-        if (occ & 1 << i)
-            drw_rect(drw, x + boxs, boxs, boxw, boxw,
-                     monitor == selected_monitor && selected_monitor->selected_client && selected_monitor->selected_client->tags & 1 << i,
-                     urg & 1 << i);
-        x += width;
+        int monitor_is_selected = monitor->tagset[monitor->selected_tags] & (1 << i);
+        if (occupied & (1 << i) || monitor_is_selected) {
+            width = TEXTW(tags[i]);
+            drw_setscheme(drw, scheme[monitor_is_selected ? SchemeSel : SchemeNorm]);
+            drw_text(drw, x, 0, width, bh, lrpad / 2, tags[i], urg & 1 << i);
+
+            // drw_rect(drw, x + boxs, boxs, boxw, boxw,
+            //          monitor == selected_monitor && selected_monitor->selected_client && selected_monitor->selected_client->tags & 1 << i,
+            //          urg & 1 << i);
+
+            x += width;
+        }
     }
-    width = blw = TEXTW(monitor->ltsymbol);
-    drw_setscheme(drw, scheme[SchemeNorm]);
-    x = drw_text(drw, x, 0, width, bh, lrpad / 2, monitor->ltsymbol, 0);
+
+    if(0) {
+        width = blw = TEXTW(monitor->ltsymbol);
+        drw_setscheme(drw, scheme[SchemeNorm]);
+        x = drw_text(drw, x, 0, width, bh, lrpad / 2, monitor->ltsymbol, 0);
+    }
 
     if ((width = monitor->window_width - tw - x) > bh) {
         if (monitor->selected_client) {
-            drw_setscheme(drw, scheme[monitor == selected_monitor ? SchemeSel : SchemeNorm]);
+            // drw_setscheme(drw, scheme[monitor == selected_monitor ? SchemeSel : SchemeNorm]);
+            drw_setscheme(drw, scheme[SchemeNorm]);
             drw_text(drw, x, 0, width, bh, lrpad / 2, monitor->selected_client->name, 0);
             if (monitor->selected_client->isfloating)
                 drw_rect(drw, x + boxs, boxs, boxw, boxw, monitor->selected_client->isfixed, 0);
@@ -970,13 +978,13 @@ void grabbuttons(Client *client, int focused) {
         XUngrabButton(global_display, AnyButton, AnyModifier, client->window);
         if (!focused)
             XGrabButton(global_display, AnyButton, AnyModifier, client->window, False,
-                        BUTTONMASK, GrabModeSync, GrabModeSync, None, None);
+                        ButtonMask, GrabModeSync, GrabModeSync, None, None);
         for (i = 0; i < ArrayLength(buttons); i++)
             if (buttons[i].click == ClkClientWin)
                 for (j = 0; j < ArrayLength(modifiers); j++)
                     XGrabButton(global_display, buttons[i].button,
                                 buttons[i].mask | modifiers[j],
-                                client->window, False, BUTTONMASK,
+                                client->window, False, ButtonMask,
                                 GrabModeAsync, GrabModeSync, None, None);
     }
 }
@@ -1000,7 +1008,7 @@ void grabkeys(void) {
 }
 
 void incnmaster(const Arg *arg) {
-    selected_monitor->nmaster = MAX(selected_monitor->nmaster + arg->i, 0);
+    selected_monitor->nmaster = Maximum(selected_monitor->nmaster + arg->i, 0);
     arrange(selected_monitor);
 }
 
@@ -1020,7 +1028,7 @@ void keypress(XEvent *event) {
 
     unsigned int i = 0;
     for(; i < ArrayLength(keys); i++) {
-        if (keysym == keys[i].keysym && CLEANMASK(keys[i].mod) == CLEANMASK(ev->state) && keys[i].func) {
+        if (keysym == keys[i].keysym && CleanMask(keys[i].mod) == CleanMask(ev->state) && keys[i].func) {
             keys[i].func(&(keys[i].arg));
             break;
         }
@@ -1074,9 +1082,9 @@ void manage(Window window, XWindowAttributes *wa) {
         client->x = client->monitor->screen_x + client->monitor->screen_width - ClientWidth(client);
     if (client->y + ClientHeight(client) > client->monitor->screen_y + client->monitor->screen_height)
         client->y = client->monitor->screen_y + client->monitor->screen_height - ClientHeight(client);
-    client->x = MAX(client->x, client->monitor->screen_x);
+    client->x = Maximum(client->x, client->monitor->screen_x);
     /* only fix client y-offset, if the client center might cover the bar */
-    client->y = MAX(client->y, ((client->monitor->bar_height == client->monitor->screen_y) && (client->x + (client->width / 2) >= client->monitor->window_x)
+    client->y = Maximum(client->y, ((client->monitor->bar_height == client->monitor->screen_y) && (client->x + (client->width / 2) >= client->monitor->window_x)
                                 && (client->x + (client->width / 2) < client->monitor->window_x + client->monitor->window_width)) ? bh : client->monitor->screen_y);
     client->border_width = borderpx;
 
@@ -1165,7 +1173,7 @@ void tile(Monitor *monitor) {
     for (unsigned int i = 0, monitor_y = 0; client != NULL; client = nexttiled(client->next), i++) {
         unsigned int height = 0;
         if (i < monitor->nmaster) {
-            height = (monitor->window_height - monitor_y) / (MIN(n, monitor->nmaster) - i);
+            height = (monitor->window_height - monitor_y) / (Minimum(n, monitor->nmaster) - i);
             resize(client, monitor->window_x, monitor->window_y + monitor_y, monitor_width - (2*client->border_width), height - (2*client->border_width), 0);
  			resize(client, monitor->window_x, monitor->window_y + monitor_y, monitor_width - (2*client->border_width) + (n > 1 ? gap_size : 0), height - (2*client->border_width), 0);
             if (monitor_y + ClientHeight(client) < monitor->window_height) {
@@ -1213,13 +1221,13 @@ void movemouse(const Arg *arg) {
     restack(selected_monitor);
     ocx = client->x;
     ocy = client->y;
-    if (XGrabPointer(global_display, root, False, MOUSEMASK, GrabModeAsync, GrabModeAsync,
+    if (XGrabPointer(global_display, root, False, MouseMask, GrabModeAsync, GrabModeAsync,
                      None, cursor[CurMove]->cursor, CurrentTime) != GrabSuccess)
         return;
     if (!getrootptr(&x, &y))
         return;
     do {
-        XMaskEvent(global_display, MOUSEMASK|ExposureMask|SubstructureRedirectMask, &ev);
+        XMaskEvent(global_display, MouseMask|ExposureMask|SubstructureRedirectMask, &ev);
         switch(ev.type) {
             case ConfigureRequest:
             case Expose:
@@ -1382,12 +1390,12 @@ void resizemouse(const Arg *arg) {
     restack(selected_monitor);
     ocx = client->x;
     ocy = client->y;
-    if (XGrabPointer(global_display, root, False, MOUSEMASK, GrabModeAsync, GrabModeAsync,
+    if (XGrabPointer(global_display, root, False, MouseMask, GrabModeAsync, GrabModeAsync,
                      None, cursor[CurResize]->cursor, CurrentTime) != GrabSuccess)
         return;
     XWarpPointer(global_display, None, client->window, 0, 0, 0, 0, client->width + client->border_width - 1, client->height + client->border_width - 1);
     do {
-        XMaskEvent(global_display, MOUSEMASK|ExposureMask|SubstructureRedirectMask, &ev);
+        XMaskEvent(global_display, MouseMask|ExposureMask|SubstructureRedirectMask, &ev);
         switch(ev.type) {
             case ConfigureRequest:
             case Expose:
@@ -1399,8 +1407,8 @@ void resizemouse(const Arg *arg) {
                     continue;
                 lasttime = ev.xmotion.time;
 
-                nw = MAX(ev.xmotion.x - ocx - 2 * client->border_width + 1, 1);
-                nh = MAX(ev.xmotion.y - ocy - 2 * client->border_width + 1, 1);
+                nw = Maximum(ev.xmotion.x - ocx - 2 * client->border_width + 1, 1);
+                nh = Maximum(ev.xmotion.y - ocy - 2 * client->border_width + 1, 1);
                 if (client->monitor->window_x + nw >= selected_monitor->window_x && client->monitor->window_x + nw <= selected_monitor->window_x + selected_monitor->window_width
                     && client->monitor->window_y + nh >= selected_monitor->window_y && client->monitor->window_y + nh <= selected_monitor->window_y + selected_monitor->window_height)
                 {
@@ -1489,7 +1497,7 @@ sendmon(Client *client, Monitor *monitor)
     detach(client);
     detachstack(client);
     client->monitor = monitor;
-    client->tags = monitor->tagset[monitor->seltags]; /* assign tags of target monitor */
+    client->tags = monitor->tagset[monitor->selected_tags]; /* assign tags of target monitor */
     attach(client);
     attachstack(client);
     focus(NULL);
@@ -1729,8 +1737,8 @@ void spawn(const Arg *arg) {
 }
 
 void tag(const Arg *arg) {
-    if (selected_monitor->selected_client && arg->ui & TAGMASK) {
-        selected_monitor->selected_client->tags = arg->ui & TAGMASK;
+    if (selected_monitor->selected_client && arg->ui & TagMask) {
+        selected_monitor->selected_client->tags = arg->ui & TagMask;
         focus(NULL);
         arrange(selected_monitor);
     }
@@ -1767,7 +1775,7 @@ void toggletag(const Arg *arg) {
 
     if (!selected_monitor->selected_client)
         return;
-    newtags = selected_monitor->selected_client->tags ^ (arg->ui & TAGMASK);
+    newtags = selected_monitor->selected_client->tags ^ (arg->ui & TagMask);
     if (newtags) {
         selected_monitor->selected_client->tags = newtags;
         focus(NULL);
@@ -1776,10 +1784,10 @@ void toggletag(const Arg *arg) {
 }
 
 void toggleview(const Arg *arg) {
-    unsigned int newtagset = selected_monitor->tagset[selected_monitor->seltags] ^ (arg->ui & TAGMASK);
+    unsigned int newtagset = selected_monitor->tagset[selected_monitor->selected_tags] ^ (arg->ui & TagMask);
 
     if (newtagset) {
-        selected_monitor->tagset[selected_monitor->seltags] = newtagset;
+        selected_monitor->tagset[selected_monitor->selected_tags] = newtagset;
         focus(NULL);
         arrange(selected_monitor);
     }
@@ -1881,64 +1889,69 @@ updatebarpos(Monitor *monitor)
         monitor->bar_height = -bh;
 }
 
-void
-updateclientlist()
-{
-    Client *client;
-    Monitor *monitor;
-
+void updateclientlist() {
     XDeleteProperty(global_display, root, netatom[NetClientList]);
-    for (monitor = all_monitors; monitor; monitor = monitor->next)
-        for (client = monitor->clients; client; client = client->next)
+    for (Monitor *monitor = all_monitors; monitor; monitor = monitor->next)
+        for (Client *client = monitor->clients; client; client = client->next)
             XChangeProperty(global_display, root, netatom[NetClientList],
                             XA_WINDOW, 32, PropModeAppend,
                             (unsigned char *) &(client->window), 1);
 }
 
-int
-updategeom(void)
-{
+int updategeom(void) {
     int dirty = 0;
 
 #ifdef XINERAMA
     if (XineramaIsActive(global_display)) {
-        int i, j, n, nn;
+        int i, j, monitor_count, num_screens;
         Client *client;
-        Monitor *monitor;
-        XineramaScreenInfo *info = XineramaQueryScreens(global_display, &nn);
+        XineramaScreenInfo *info = XineramaQueryScreens(global_display, &num_screens);
         XineramaScreenInfo *unique = NULL;
 
-        for (n = 0, monitor = all_monitors; monitor; monitor = monitor->next, n++);
+        Monitor *monitor = all_monitors;
+        for (monitor_count = 0; monitor; monitor = monitor->next, monitor_count++) {
+        }
         /* only consider unique geometries as separate screens */
-        unique = ecalloc(nn, sizeof(XineramaScreenInfo));
-        for (i = 0, j = 0; i < nn; i++)
+        unique = ecalloc(num_screens, sizeof(XineramaScreenInfo));
+        for (i = 0, j = 0; i < num_screens; i++)
             if (isuniquegeom(unique, j, &info[i]))
                 memcpy(&unique[j++], &info[i], sizeof(XineramaScreenInfo));
         XFree(info);
-        nn = j;
-        if (n <= nn) { /* new monitors available */
-            for (i = 0; i < (nn - n); i++) {
-                for (monitor = all_monitors; monitor && monitor->next; monitor = monitor->next);
-                if (monitor)
-                    monitor->next = createmon();
-                else
-                    all_monitors = createmon();
-            }
-            for (i = 0, monitor = all_monitors; i < nn && monitor; monitor = monitor->next, i++)
-                if (i >= n
-                    || unique[i].x_org != monitor->screen_x || unique[i].y_org != monitor->screen_y
-                    || unique[i].width != monitor->screen_width || unique[i].height != monitor->screen_height)
-                {
-                    dirty = 1;
-                    monitor->num = i;
-                    monitor->screen_x = monitor->window_x = unique[i].x_org;
-                    monitor->screen_y = monitor->window_y = unique[i].y_org;
-                    monitor->screen_width = monitor->window_width = unique[i].width;
-                    monitor->screen_height = monitor->window_height = unique[i].height;
-                    updatebarpos(monitor);
+        num_screens = j;
+        if (monitor_count <= num_screens) { /* new monitors available */
+            for (i = 0; i < (num_screens - monitor_count); i++) {
+                Monitor *new_monitor = createmon();
+
+                if(all_monitors) {
+                    Monitor *current_monitor = all_monitors;
+                    for (; current_monitor->next; current_monitor = current_monitor->next) {
+                    }
+                    current_monitor->next = new_monitor;
+                } else {
+                    all_monitors = new_monitor;
                 }
-        } else { /* less monitors available nn < n */
-            for (i = nn; i < n; i++) {
+            }
+
+            if (all_monitors) {
+                Monitor *current_monitor = all_monitors;
+                for (int i = 0; i < num_screens; current_monitor = current_monitor->next, i++) {
+                    if(i >= monitor_count
+                       || unique[i].x_org  != current_monitor->screen_x
+                       || unique[i].y_org  != current_monitor->screen_y
+                       || unique[i].width  != current_monitor->screen_width
+                       || unique[i].height != current_monitor->screen_height) {
+                        dirty = 1;
+                        current_monitor->num = i;
+                        current_monitor->screen_x = current_monitor->window_x = unique[i].x_org;
+                        current_monitor->screen_y = current_monitor->window_y = unique[i].y_org;
+                        current_monitor->screen_width = current_monitor->window_width = unique[i].width;
+                        current_monitor->screen_height = current_monitor->window_height = unique[i].height;
+                        updatebarpos(current_monitor);
+                    }
+                }
+            }
+        } else { /* less monitors available num_screens < monitor_count */
+            for (i = num_screens; i < monitor_count; i++) {
                 for (monitor = all_monitors; monitor && monitor->next; monitor = monitor->next);
                 while ((client = monitor->clients)) {
                     dirty = 1;
@@ -2096,21 +2109,18 @@ void updatewmhints(Client *client) {
 }
 
 void view(const Arg *arg) {
-    if ((arg->ui & TAGMASK) == selected_monitor->tagset[selected_monitor->seltags])
+    if ((arg->ui & TagMask) == selected_monitor->tagset[selected_monitor->selected_tags])
         return;
-    selected_monitor->seltags ^= 1; /* toggle sel tagset */
-    if (arg->ui & TAGMASK)
-        selected_monitor->tagset[selected_monitor->seltags] = arg->ui & TAGMASK;
+    selected_monitor->selected_tags ^= 1; /* toggle sel tagset */
+    if (arg->ui & TagMask)
+        selected_monitor->tagset[selected_monitor->selected_tags] = arg->ui & TagMask;
     focus(NULL);
     arrange(selected_monitor);
 }
 
 Client *wintoclient(Window window) {
-    Client *client;
-    Monitor *monitor;
-
-    for (monitor = all_monitors; monitor; monitor = monitor->next)
-        for (client = monitor->clients; client; client = client->next)
+    for (Monitor *monitor = all_monitors; monitor; monitor = monitor->next)
+        for (Client *client = monitor->clients; client; client = client->next)
             if (client->window == window)
                 return client;
     return NULL;
@@ -2121,8 +2131,7 @@ Monitor *wintomon(Window window) {
     if (window == root && getrootptr(&x, &y))
         return recttomon(x, y, 1, 1);
 
-    Monitor *monitor = NULL;
-    for (monitor = all_monitors; monitor; monitor = monitor->next)
+    for (Monitor *monitor = all_monitors; monitor; monitor = monitor->next)
         if (window == monitor->barwin)
             return monitor;
 
