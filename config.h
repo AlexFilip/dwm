@@ -12,29 +12,35 @@ static const char col_gray2[]       = "#444444";
 static const char col_gray3[]       = "#bbbbbb";
 static const char col_gray4[]       = "#eeeeee";
 static const char col_cyan[]        = "#005577";
+
+static int gap_size                 = 6;        /* gaps between windows */
+
 static const char *colors[][3]      = {
     /*               fg         bg         border   */
     [SchemeNorm] = { col_gray3, col_gray1, col_gray2 },
     [SchemeSel]  = { col_gray4, col_cyan,  col_cyan  },
+
 };
 
 /* tagging */
 static const char *tags[] = { "Main", ">_", "3", "4", "5", "6", "7", "8", "9" };
+static int tag_break = 5; // first tag on the secondary monitor (dual monitor only)
 
 static const Rule rules[] = {
     /* xprop(1):
      *    WM_CLASS(STRING) = instance, class
      *    WM_NAME(STRING) = title
      */
-    /* class      instance    title       tags mask     isfloating   monitor */
-    { "Gimp",     NULL,       NULL,       0,            1,           -1 },
-    { "Firefox",  NULL,       NULL,       1 << 8,       0,           -1 },
+    /* class              instance    title                   tags mask   isfloating   monitor */
+    { "Gimp",             NULL,       NULL,                   0,          1,           -1 },
+    { "Firefox",          NULL,       NULL,                   1 << 8,     0,           -1 },
+    { "blueman-manager",  NULL,       "Bluetooth devices",    0,          1,           -1 },
 };
 
 /* layout(s) */
 static const float mfact     = 0.55; /* factor of master area size [0.05..0.95] */
 static const int nmaster     = 1;    /* number of clients in master area */
-static const int resizehints = 1;    /* 1 means respect size hints in tiled resizals */
+static const int resizehints = 0;    /* 1 means respect size hints in tiled resizals */
 static const int lockfullscreen = 1; /* 1 will force focus on the fullscreen window */
 static const Layout layouts[] = {
     /* symbol     arrange function */
@@ -53,6 +59,8 @@ static const Layout layouts[] = {
 
 /* helper for spawning shell commands in the pre dwm-5.0 fashion */
 #define SHCMD(cmd) { .v = (const char*[]){ "/bin/sh", "-c", cmd, NULL } }
+
+#define STATUSBAR "dwmblocks"
 
 static const char* volume_up[]   = { "/usr/bin/pactl", "set-sink-volume", "@DEFAULT_SINK@",   "+5%",    NULL };
 static const char* volume_down[] = { "/usr/bin/pactl", "set-sink-volume", "@DEFAULT_SINK@",   "-5%",    NULL };
@@ -79,8 +87,8 @@ static Key keys[] = {
     { MODKEY,                       XK_b,      spawn,          {.v = browsercmd } },
     { MODKEY,                       XK_p,      spawn,          {.v = htopcmd } },
     // { MODKEY,                       XK_f,      togglebar,      {0} },
-    { MODKEY,                       XK_h,      focusstack,     {.i = +1 } },
-    { MODKEY,                       XK_l,      focusstack,     {.i = -1 } },
+    { MODKEY,                       XK_h,      focusstack,     {.i = -1 } },
+    { MODKEY,                       XK_l,      focusstack,     {.i = +1 } },
     { MODKEY,                       XK_j,      setmfact,       {.f = -0.05} },
     { MODKEY,                       XK_k,      setmfact,       {.f = +0.05} },
     // { MODKEY,                       XK_i,      incnmaster,     {.i = +1 } },
@@ -101,8 +109,8 @@ static Key keys[] = {
     { MODKEY|ShiftMask,             XK_comma,  tagmon,         {.i = -1 } },
     { MODKEY|ShiftMask,             XK_period, tagmon,         {.i = +1 } },
 
-    { MODKEY,                       XK_0,      view,           {.ui = ~0 } },
-    { MODKEY|ShiftMask,             XK_0,      tag,            {.ui = ~0 } },
+    { MODKEY,                       XK_0,      view,           { .ui = ~0 } },
+    { MODKEY|ShiftMask,             XK_0,      tag,            { .ui = ~0 } },
 
     TAGKEYS(                        XK_1,                      0)
     TAGKEYS(                        XK_2,                      1)
@@ -114,6 +122,9 @@ static Key keys[] = {
     TAGKEYS(                        XK_8,                      7)
     TAGKEYS(                        XK_9,                      8)
     { MODKEY|ShiftMask,             XK_q,      quit,           {0} },
+
+    { MODKEY,                       XK_y,      change_gap,     { .i = +1 } },
+    { MODKEY|ShiftMask,             XK_y,      change_gap,     { .i = -1 } },
 
     // Volume controls
     { 0, XF86XK_AudioRaiseVolume,  spawn, { .v = volume_up   } },
@@ -133,7 +144,9 @@ static Button buttons[] = {
     // { ClkLtSymbol,          0,              Button1,        setlayout,      {0} },
     // { ClkLtSymbol,          0,              Button3,        setlayout,      {.v = &layouts[2]} },
     { ClkWinTitle,          0,              Button2,        zoom,           {0} },
-    { ClkStatusText,        0,              Button2,        spawn,          {.v = termcmd } },
+    { ClkStatusText,        0,              Button1,        sigstatusbar,   {.i = 1} },
+    { ClkStatusText,        0,              Button2,        sigstatusbar,   {.i = 2} },
+    { ClkStatusText,        0,              Button3,        sigstatusbar,   {.i = 3} },
     { ClkClientWin,         MODKEY,         Button1,        movemouse,      {0} },
     { ClkClientWin,         MODKEY,         Button2,        togglefloating, {0} },
     { ClkClientWin,         MODKEY,         Button3,        resizemouse,    {0} },

@@ -4,7 +4,7 @@
 include config.mk
 
 SRC = drw.c dwm.c util.c
-OBJ = ${SRC:.c=.o}
+OBJ = $(addprefix obj/, ${SRC:.c=.o})
 CC  = clang
 
 all: options dwm
@@ -15,8 +15,9 @@ options:
 	@echo "LDFLAGS = ${LDFLAGS}"
 	@echo "CC      = ${CC}"
 
-.c.o:
-	${CC} -c ${CFLAGS} $<
+# .c.o:
+obj/%.o : %.c
+	${CC} -c ${CFLAGS} $< -o $@
 
 ${OBJ}: config.h config.mk
 

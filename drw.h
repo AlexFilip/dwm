@@ -1,33 +1,36 @@
 /* See LICENSE file for copyright and license details. */
 
-typedef struct {
+typedef struct Cur Cur;
+struct Cur {
 	Cursor cursor;
-} Cur;
+};
 
-typedef struct Fnt {
-	Display *dpy;
-	unsigned int h;
+typedef struct Fnt Fnt;
+struct Fnt {
+	Display *display;
+	unsigned int height;
 	XftFont *xfont;
 	FcPattern *pattern;
 	struct Fnt *next;
-} Fnt;
+};
 
 enum { ColFg, ColBg, ColBorder }; /* Clr scheme index */
 typedef XftColor Clr;
 
-typedef struct {
-	unsigned int w, h;
-	Display *dpy;
+typedef struct Drw Drw;
+struct Drw {
+	unsigned int width, height;
+	Display *display;
 	int screen;
 	Window root;
 	Drawable drawable;
 	GC gc;
 	Clr *scheme;
 	Fnt *fonts;
-} Drw;
+};
 
 /* Drawable abstraction */
-Drw *drw_create(Display *dpy, int screen, Window win, unsigned int w, unsigned int h);
+Drw *drw_create(Display *display, int screen, Window win, unsigned int w, unsigned int h);
 void drw_resize(Drw *drw, unsigned int w, unsigned int h);
 void drw_free(Drw *drw);
 
