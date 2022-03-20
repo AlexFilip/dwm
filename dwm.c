@@ -25,6 +25,8 @@
  *  - FIX: after making the gap size 0, when you try to make it smaller, only some windows resize
  *  - Change monitor and client list from linked-list to array
  *    - Instead of holding raw pointers to monitors and clients, use indices into the array (selected_monitor and variables like it become integers)
+ *    - Client list in monitor should be 2 lists, one for tiled, one for floating, that way nexttiled basically disappears (or becomes next_visible)
+ *    - Think about how stacks are handled in this scenario
  *  - Create a secondary process that loads a dynamic library and runs it
  *    - In the dynamic library, set the value of the status bar and handle keyboard shortcuts to launch apps
  *    - If the process dies (for whatever reason), dwm can report it and revive it when a keyboard shortcut is pressed or when the library is replaced with a new version
@@ -59,18 +61,15 @@
 #include "util.h"
 
 /* macros */
-#define ButtonMask              (ButtonPressMask|ButtonReleaseMask)
-#define CleanMask(mask)         (mask & ~(numlockmask|LockMask) & (ShiftMask|ControlMask|Mod1Mask|Mod2Mask|Mod3Mask|Mod4Mask|Mod5Mask))
-#define Intersect(x, y, width, height, monitor) (Maximum(0, Minimum((x)+(width),(monitor)->window_x+(monitor)->window_width) - Maximum((x),(monitor)->window_x)) \
-                                                 * Maximum(0, Minimum((y)+(height),(monitor)->window_y+(monitor)->window_height) - Maximum((y),(monitor)->window_y)))
-#define IsVisible(Client)            ((Client->tags & Client->monitor->selected_tags))
-#define ArrayLength(X)          (sizeof(X) / sizeof((X)[0]))
-#define MouseMask               (ButtonMask|PointerMotionMask)
-
-#define GappedClientWidth(Client)     ((Client)->width + 2 * (Client)->border_width + gap_size)
-#define GappedClientHeight(Client)    ((Client)->height + 2 * (Client)->border_width + gap_size)
-#define TagMask                 ((1 << ArrayLength(tags)) - 1)
-#define TEXTW(X)                (drw_fontset_getwidth(drw, (X)) + lrpad)
+#define ButtonMask                                (ButtonPressMask|ButtonReleaseMask)
+#define CleanMask(mask)                           (mask & ~(numlockmask|LockMask) & (ShiftMask|ControlMask|Mod1Mask|Mod2Mask|Mod3Mask|Mod4Mask|Mod5Mask))
+#define IsVisible(Client)                         (Client->tags & Client->monitor->selected_tags)
+#define ArrayLength(X)                            (sizeof(X) / sizeof((X)[0]))
+#define MouseMask                                 (ButtonMask|PointerMotionMask)
+#define GappedClientWidth(Client)                 ((Client)->width + 2 * (Client)->border_width + gap_size)
+#define GappedClientHeight(Client)                ((Client)->height + 2 * (Client)->border_width + gap_size)
+#define TagMask                                   ((1 << ArrayLength(tags)) - 1)
+#define TextWidth(X)                              (drw_fontset_getwidth(drw, (X)) + lrpad)
 
 /* enums */
 enum { CurNormal, CurResize, CurMove, CurLast }; /* cursor */
@@ -125,7 +124,7 @@ struct Client {
     // };
     int oldstate;
     Client *next;
-    Client *snext; // next in stack
+    Client *next_in_stack;
     Monitor *monitor;
     Window window;
 };
@@ -157,6 +156,9 @@ struct Monitor {
     unsigned int selected_layout;
     int showbar;
     int topbar;
+
+    // int num_clients;
+
     Client *clients;
     Client *selected_client;
     Client *stack;
@@ -444,7 +446,7 @@ void attach(Client *client) {
 }
 
 void attachstack(Client *client) {
-    client->snext = client->monitor->stack;
+    client->next_in_stack = client->monitor->stack;
     client->monitor->stack = client;
 }
 
@@ -474,7 +476,7 @@ void buttonpress(XEvent *event) {
 
         do {
             if (occupied & (1 << i)) { 
-                x += TEXTW(tags[i]);
+                x += TextWidth(tags[i]);
             }
         } while (ev->x >= x && ++i < ArrayLength(tags));
         if (i < ArrayLength(tags)) {
@@ -490,7 +492,7 @@ void buttonpress(XEvent *event) {
                 if ((unsigned char)(*s) < ' ') {
                     ch = *s;
                     *s = '\0';
-                    x += TEXTW(text) - lrpad;
+                    x += TextWidth(text) - lrpad;
                     *s = ch;
                     text = s + 1;
                     if (x >= ev->x)
@@ -703,11 +705,11 @@ void detach(Client *client) {
 void detachstack(Client *client) {
     Client **tc, *t;
 
-    for (tc = &client->monitor->stack; *tc && *tc != client; tc = &(*tc)->snext);
-    *tc = client->snext;
+    for (tc = &client->monitor->stack; *tc && *tc != client; tc = &(*tc)->next_in_stack);
+    *tc = client->next_in_stack;
 
     if (client == client->monitor->selected_client) {
-        for (t = client->monitor->stack; t && !IsVisible(t); t = t->snext);
+        for (t = client->monitor->stack; t && !IsVisible(t); t = t->next_in_stack);
         client->monitor->selected_client = t;
     }
 }
@@ -745,14 +747,14 @@ void drawbar(Monitor *monitor) {
             if ((unsigned char)(*s) < ' ') {
                 ch = *s;
                 *s = '\0';
-                tw = TEXTW(text) - lrpad;
+                tw = TextWidth(text) - lrpad;
                 drw_text(drw, monitor->window_width - statusw + x, 0, tw, bh, 0, text, 0);
                 x += tw;
                 *s = ch;
                 text = s + 1;
             }
         }
-        tw = TEXTW(text) - lrpad + 2;
+        tw = TextWidth(text) - lrpad + 2;
         drw_text(drw, monitor->window_width - statusw + x, 0, tw, bh, 0, text, 0);
         tw = statusw;
     }
@@ -767,7 +769,7 @@ void drawbar(Monitor *monitor) {
     for (i = 0; i < ArrayLength(tags); i++) {
         int monitor_is_selected = monitor->selected_tags & (1 << i);
         if (occupied & (1 << i) || monitor_is_selected) {
-            width = TEXTW(tags[i]);
+            width = TextWidth(tags[i]);
             drw_setscheme(drw, scheme[monitor_is_selected ? SchemeSel : SchemeNorm]);
             drw_text(drw, x, 0, width, bh, lrpad / 2, tags[i], urg & 1 << i);
 
@@ -827,7 +829,7 @@ void expose(XEvent *event) {
 
 void focus(Client *client) {
     if (!client || !IsVisible(client))
-        for (client = selected_monitor->stack; client && !IsVisible(client); client = client->snext);
+        for (client = selected_monitor->stack; client && !IsVisible(client); client = client->next_in_stack);
 
     if (selected_monitor->selected_client && selected_monitor->selected_client != client)
         unfocus(selected_monitor->selected_client, 0);
@@ -1154,15 +1156,7 @@ void maprequest(XEvent *event) {
 
 // Layouts
 void monocle(Monitor *monitor) {
-    unsigned int n = 0;
     Client *client;
-
-    for (client = monitor->clients; client; client = client->next) {
-        if (IsVisible(client)) {
-            n++;
-        }
-    }
-
     for (client = nexttiled(monitor->clients); client; client = nexttiled(client->next)) {
         resize(client,
                monitor->window_x,
@@ -1209,13 +1203,13 @@ void tile(Monitor *monitor) {
         master_width -= gap_size;
 
         // draw remaining windows on right
-        unsigned int height = monitor->window_height / (num_clients - 1);
+        unsigned int height = (monitor->window_height - gap_size) / (num_clients - 1);
         for (; client != NULL; client = nexttiled(client->next)) {
             resize(client,
                    monitor->window_x + master_width,
                    monitor->window_y + ty,
                    monitor->window_width - master_width - (2*client->border_width),
-                   height - (2*client->border_width),
+                   height - (2*client->border_width) + gap_size,
                    0);
             if (ty + height < monitor->window_height) {
                 ty += height;
@@ -1353,13 +1347,17 @@ void quit(const Arg *arg) {
 
 Monitor *recttomon(int x, int y, int width, int height) {
     Monitor *monitor, *r = selected_monitor;
-    int a, area = 0;
+    int area = 0;
 
-    for (monitor = all_monitors; monitor; monitor = monitor->next)
-        if ((a = Intersect(x, y, width, height, monitor)) > area) {
-            area = a;
+    for (monitor = all_monitors; monitor; monitor = monitor->next) {
+        int intersect = Maximum(0,
+                                Minimum(x + width, monitor->window_x + monitor->window_width)
+                                - Maximum(x, monitor->window_x)) * Maximum(0, Minimum(y + height, monitor->window_y + monitor->window_height) - Maximum(y, monitor->window_y));
+        if (intersect > area) {
+            area = intersect;
             r = monitor;
         }
+    }
     return r;
 }
 
@@ -1476,7 +1474,7 @@ void restack(Monitor *monitor) {
 
     wc.stack_mode = Below;
     wc.sibling = monitor->barwin;
-    for (client = monitor->stack; client; client = client->snext) {
+    for (client = monitor->stack; client; client = client->next_in_stack) {
         if (!client->isfloating && IsVisible(client)) {
             XConfigureWindow(global_display, client->window, CWSibling|CWStackMode, &wc);
             wc.sibling = client->window;
@@ -1729,10 +1727,10 @@ void showhide(Client *client) {
         if (client->isfloating && !client->isfullscreen) {
             resize(client, client->x, client->y, client->width, client->height, 0);
         }
-        showhide(client->snext);
+        showhide(client->next_in_stack);
     } else {
         /* hide clients bottom up */
-        showhide(client->snext);
+        showhide(client->next_in_stack);
         XMoveWindow(global_display, client->window, GappedClientWidth(client) * -2, client->y);
     }
 }
@@ -2061,7 +2059,7 @@ void updatesizehints(Client *client) {
 void updatestatus(void) {
     if (!gettextprop(root, XA_WM_NAME, stext, sizeof(stext))) {
         strcpy(stext, "dwm-"VERSION);
-        statusw = TEXTW(stext) - lrpad + 2;
+        statusw = TextWidth(stext) - lrpad + 2;
     } else {
         char *text, *s, ch;
 
@@ -2070,12 +2068,12 @@ void updatestatus(void) {
             if ((unsigned char)(*s) < ' ') {
                 ch = *s;
                 *s = '\0';
-                statusw += TEXTW(text) - lrpad;
+                statusw += TextWidth(text) - lrpad;
                 *s = ch;
                 text = s + 1;
             }
         }
-        statusw += TEXTW(text) - lrpad + 2;
+        statusw += TextWidth(text) - lrpad + 2;
     }
     drawbar(selected_monitor);
 }
