@@ -43,11 +43,15 @@ static const float mfact     = 0.55f; /* factor of master area size [0.05..0.95]
 static const int nmaster     = 1;    /* number of clients in master area */
 static const int resizehints = 0;    /* 1 means respect size hints in tiled resizals */
 static const int lockfullscreen = 1; /* 1 will force focus on the fullscreen window */
+
+static const int tile_index = 0;
+static const int monocle_index = 1;
 static const Layout layouts[] = {
     /* symbol     arrange function */
     { "[]=",      tile },    /* first entry is default */
     { "[M]",      monocle },
-    { "><>",      NULL },    /* no layout function means floating behavior */
+    // NOTE: NULL is not a supported state in this fork of dwm
+    // { "><>",      NULL },    /* no layout function means floating behavior */
 };
 
 /* key definitions */
