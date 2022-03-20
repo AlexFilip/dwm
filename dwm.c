@@ -24,7 +24,6 @@
 /* TODO:
  *  - Change monitor and client list from linked-list to array
  *    - Instead of holding raw pointers to monitors and clients, use indices into the array (selected_monitor and variables like it become integers)
- *  - Find out how to reliably change monitor tagset to make each monitor have its own tags
  *  - Create a secondary process that loads a dynamic library and runs it
  *    - In the dynamic library, set the value of the status bar and handle keyboard shortcuts to launch apps
  *    - If the process dies (for whatever reason), dwm can report it and revive it when a keyboard shortcut is pressed or when the library is replaced with a new version
@@ -323,7 +322,6 @@ struct NumTags { char limitexceeded[ArrayLength(tags) > 31 ? -1 : 1]; };
 void applyrules(Client *client) {
     const char *class, *instance;
     unsigned int i;
-    const Rule *rule;
     Monitor *monitor;
     XClassHint ch = { NULL, NULL };
 
@@ -335,7 +333,7 @@ void applyrules(Client *client) {
     instance = ch.res_name  ? ch.res_name  : broken;
 
     for (i = 0; i < ArrayLength(rules); i++) {
-        rule = &rules[i];
+        const Rule *rule = &rules[i];
         if ((!rule->title || strstr(client->name, rule->title))
         && (!rule->class || strstr(class, rule->class))
         && (!rule->instance || strstr(instance, rule->instance)))
@@ -1495,11 +1493,10 @@ void scan(void) {
     }
 }
 
-void
-sendmon(Client *client, Monitor *monitor)
-{
+void sendmon(Client *client, Monitor *monitor) {
     if (client->monitor == monitor)
         return;
+
     unfocus(client, 1);
     detach(client);
     detachstack(client);
@@ -1511,18 +1508,14 @@ sendmon(Client *client, Monitor *monitor)
     arrange(NULL);
 }
 
-void
-setclientstate(Client *client, long state)
-{
+void setclientstate(Client *client, long state) {
     long data[] = { state, None };
 
     XChangeProperty(global_display, client->window, wmatom[WMState], wmatom[WMState], 32,
                     PropModeReplace, (unsigned char *)data, 2);
 }
 
-int
-sendevent(Client *client, Atom proto)
-{
+int sendevent(Client *client, Atom proto) {
     int n;
     Atom *protocols;
     int exists = 0;
@@ -1765,13 +1758,6 @@ void tagmon(const Arg *arg) {
     sendmon(selected_monitor->selected_client, dirtomon(arg->i));
 }
 
-// void togglebar(const Arg *arg) {
-//     selected_monitor->showbar = !selected_monitor->showbar;
-//     updatebarpos(selected_monitor);
-//     XMoveResizeWindow(global_display, selected_monitor->barwin, selected_monitor->window_x, selected_monitor->bar_height, selected_monitor->window_width, bh);
-//     arrange(selected_monitor);
-// }
-
 void togglefloating(const Arg *arg) {
     if (!selected_monitor->selected_client)
         return;
@@ -1852,9 +1838,7 @@ void unmanage(Client *client, int destroyed) {
     arrange(monitor);
 }
 
-void
-unmapnotify(XEvent *event)
-{
+void unmapnotify(XEvent *event) {
     Client *client;
     XUnmapEvent *ev = &event->xunmap;
 
@@ -1866,9 +1850,7 @@ unmapnotify(XEvent *event)
     }
 }
 
-void
-updatebars(void)
-{
+void updatebars(void) {
     Monitor *monitor;
     XSetWindowAttributes wa = {
         .override_redirect = True,
@@ -1888,9 +1870,7 @@ updatebars(void)
     }
 }
 
-void
-updatebarpos(Monitor *monitor)
-{
+void updatebarpos(Monitor *monitor) {
     monitor->window_y = monitor->screen_y;
     monitor->window_height = monitor->screen_height;
     if (monitor->showbar) {
@@ -1998,9 +1978,7 @@ int updategeom(void) {
     return dirty;
 }
 
-void
-updatenumlockmask(void)
-{
+void updatenumlockmask(void) {
     unsigned int i, j;
     XModifierKeymap *modmap;
 
@@ -2014,9 +1992,7 @@ updatenumlockmask(void)
     XFreeModifiermap(modmap);
 }
 
-void
-updatesizehints(Client *client)
-{
+void updatesizehints(Client *client) {
     long msize;
     XSizeHints size;
 
@@ -2079,18 +2055,14 @@ void updatestatus(void) {
     drawbar(selected_monitor);
 }
 
-void
-updatetitle(Client *client)
-{
+void updatetitle(Client *client) {
     if (!gettextprop(client->window, netatom[NetWMName], client->name, sizeof(client->name)))
         gettextprop(client->window, XA_WM_NAME, client->name, sizeof(client->name));
     if (client->name[0] == '\0') /* hack to mark broken clients */
         strcpy(client->name, broken);
 }
 
-void
-updatewindowtype(Client *client)
-{
+void updatewindowtype(Client *client) {
     Atom state = getatomprop(client, netatom[NetWMState]);
     Atom wtype = getatomprop(client, netatom[NetWMWindowType]);
 
