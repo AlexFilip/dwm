@@ -640,7 +640,7 @@ int createmon(void) {
 
     if(all_monitors) {
         int monitor_index = 0;
-        for(; monitor_index < monitor_capacity; ++monitor_capacity) {
+        for(; monitor_index < monitor_capacity; ++monitor_index) {
             Monitor *current_monitor = &all_monitors[monitor_index];
             if(!current_monitor->is_valid) {
                 monitor = current_monitor;
@@ -711,31 +711,36 @@ void detachstack(Client *client) {
 }
 
 int dirtomon(int dir) {
-    int monitor_index = 0;
+    int monitor_index = selected_monitor;
 
-    if (dir > 0) {
-        monitor_index = selected_monitor + 1;
-
-        while(!all_monitors[monitor_index].is_valid) {
-            ++monitor_index;
-
-            if(monitor_index == selected_monitor) {
-                break;
-            } else if(monitor_index == monitor_capacity) {
-                monitor_index = 0;
-            }
-        }
+    int increment;
+    int end_point;
+    int loop_point;
+    if(dir > 0) {
+        increment = 1;
+        end_point = monitor_capacity;
+        loop_point = 0;
     } else {
-        monitor_index = selected_monitor - 1;
+        increment = -1;
+        end_point = -1;
+        loop_point = monitor_capacity - 1;
+    }
 
-        while(!all_monitors[monitor_index].is_valid) {
-            --monitor_index;
+    for(;;) {
+        monitor_index += increment;
 
-            if(monitor_index == selected_monitor) {
-                break;
-            } else if(monitor_index < 0) {
-                monitor_index = monitor_capacity - 1;
-            }
+        if(monitor_index == end_point) {
+            monitor_index = loop_point;
+        }
+
+        if(monitor_index == selected_monitor) {
+            break;
+        } else if(monitor_index == end_point) {
+            monitor_index = loop_point;
+        }
+
+        if(all_monitors[monitor_index].is_valid) {
+            break;
         }
     }
 
