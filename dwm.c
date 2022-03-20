@@ -63,11 +63,11 @@
 #define CleanMask(mask)         (mask & ~(numlockmask|LockMask) & (ShiftMask|ControlMask|Mod1Mask|Mod2Mask|Mod3Mask|Mod4Mask|Mod5Mask))
 #define Intersect(x, y, width, height, monitor) (Maximum(0, Minimum((x)+(width),(monitor)->window_x+(monitor)->window_width) - Maximum((x),(monitor)->window_x)) \
                                                  * Maximum(0, Minimum((y)+(height),(monitor)->window_y+(monitor)->window_height) - Maximum((y),(monitor)->window_y)))
-#define IsVisible(C)            ((C->tags & C->monitor->tagset[C->monitor->selected_tags]))
+#define IsVisible(Client)            ((Client->tags & Client->monitor->selected_tags))
 #define ArrayLength(X)          (sizeof(X) / sizeof((X)[0]))
 #define MouseMask               (ButtonMask|PointerMotionMask)
-#define ClientWidth(X)          ((X)->width + 2 * (X)->border_width + gap_size)
-#define ClientHeight(X)         ((X)->height + 2 * (X)->border_width + gap_size)
+#define ClientWidth(Client)     ((Client)->width + 2 * (Client)->border_width + gap_size)
+#define ClientHeight(Client)    ((Client)->height + 2 * (Client)->border_width + gap_size)
 #define TagMask                 ((1 << ArrayLength(tags)) - 1)
 #define TEXTW(X)                (drw_fontset_getwidth(drw, (X)) + lrpad)
 
@@ -114,7 +114,15 @@ struct Client {
 
     int border_width, old_border_width;
     unsigned int tags;
-    int isfixed, isfloating, isurgent, neverfocus, oldstate, isfullscreen;
+    // struct {
+        // flags
+        signed char isfixed: 1;
+        signed char isfloating: 1;
+        signed char isurgent: 1;
+        signed char isfullscreen: 1;
+        signed char neverfocus: 1;
+    // };
+    int oldstate;
     Client *next;
     Client *snext; // next in stack
     Monitor *monitor;
@@ -147,7 +155,7 @@ struct Monitor {
     int window_x, window_y, window_width, window_height;   /* window area  */
     unsigned int selected_tags;
     unsigned int selected_layout;
-    unsigned int tagset[2];
+    // unsigned int tagset[2];
     int showbar;
     int topbar;
     Client *clients;
@@ -155,7 +163,7 @@ struct Monitor {
     Client *stack;
     Monitor *next;
     Window barwin;
-    const Layout *layouts[2];
+    // const Layout *layouts[2];
 };
 
 typedef struct Rule Rule;
@@ -348,7 +356,7 @@ void applyrules(Client *client) {
         XFree(ch.res_class);
     if (ch.res_name)
         XFree(ch.res_name);
-    client->tags = client->tags & TagMask ? client->tags & TagMask : client->monitor->tagset[client->monitor->selected_tags];
+    client->tags = client->tags & TagMask ? client->tags & TagMask : client->monitor->selected_tags;
 }
 
 int applysizehints(Client *client, int *x, int *y, int *width, int *height, int interact) {
@@ -381,7 +389,7 @@ int applysizehints(Client *client, int *x, int *y, int *width, int *height, int 
         *height = bh;
     if (*width < bh)
         *width = bh;
-    if (resizehints || client->isfloating || !client->monitor->layouts[client->monitor->selected_layout]->arrange) {
+    if (resizehints || client->isfloating || !layouts[client->monitor->selected_layout].arrange) {
         /* see last two sentences in ICCCM 4.1.2.3 */
         baseismin = client->base_width == client->min_width && client->base_height == client->min_height;
         if (!baseismin) { /* temporarily remove base dimensions */
@@ -428,9 +436,9 @@ void arrange(Monitor *monitor) {
 }
 
 void arrangemon(Monitor *monitor) {
-    strncpy(monitor->ltsymbol, monitor->layouts[monitor->selected_layout]->symbol, sizeof(monitor->ltsymbol));
-    if (monitor->layouts[monitor->selected_layout]->arrange)
-        monitor->layouts[monitor->selected_layout]->arrange(monitor);
+    strncpy(monitor->ltsymbol, layouts[monitor->selected_layout].symbol, sizeof(monitor->ltsymbol));
+    if (layouts[monitor->selected_layout].arrange)
+        layouts[monitor->selected_layout].arrange(monitor);
 }
 
 void attach(Client *client) {
@@ -520,12 +528,12 @@ void checkotherwm(void) {
 
 void cleanup(void) {
     Arg a = { .ui = ~0 };
-    Layout foo = { "", NULL };
+    // Layout foo = { "", NULL };
     Monitor *monitor;
     size_t i;
 
     view(&a);
-    selected_monitor->layouts[selected_monitor->selected_layout] = &foo;
+    // selected_monitor->layouts[selected_monitor->selected_layout] = &foo;
     for (monitor = all_monitors; monitor; monitor = monitor->next)
         while (monitor->stack)
             unmanage(monitor->stack, 0);
@@ -626,7 +634,7 @@ void configurerequest(XEvent *event) {
     if ((client = wintoclient(ev->window))) {
         if (ev->value_mask & CWBorderWidth)
             client->border_width = ev->border_width;
-        else if (client->isfloating || !selected_monitor->layouts[selected_monitor->selected_layout]->arrange) {
+        else if (client->isfloating || !layouts[selected_monitor->selected_layout].arrange) {
             monitor = client->monitor;
             if (ev->value_mask & CWX) {
                 client->oldx = client->x;
@@ -671,13 +679,14 @@ Monitor *createmon(void) {
     Monitor *monitor;
 
     monitor = ecalloc(1, sizeof(Monitor));
-    monitor->tagset[0] = monitor->tagset[1] = 1;
+    monitor->selected_tags = 1;
+    // monitor->tagset[0] = monitor->tagset[1] = 1;
     monitor->mfact = mfact;
     monitor->nmaster = nmaster;
     monitor->showbar = showbar;
     monitor->topbar = topbar;
-    monitor->layouts[0] = &layouts[0];
-    monitor->layouts[1] = &layouts[1 % ArrayLength(layouts)];
+    // monitor->layouts[0] = &layouts[0];
+    // monitor->layouts[1] = &layouts[1 % ArrayLength(layouts)];
     strncpy(monitor->ltsymbol, layouts[0].symbol, sizeof(monitor->ltsymbol));
     return monitor;
 }
@@ -762,7 +771,7 @@ void drawbar(Monitor *monitor) {
 
     x = 0;
     for (i = 0; i < ArrayLength(tags); i++) {
-        int monitor_is_selected = monitor->tagset[monitor->selected_tags] & (1 << i);
+        int monitor_is_selected = monitor->selected_tags & (1 << i);
         if (occupied & (1 << i) || monitor_is_selected) {
             width = TEXTW(tags[i]);
             drw_setscheme(drw, scheme[monitor_is_selected ? SchemeSel : SchemeNorm]);
@@ -859,16 +868,22 @@ void focusin(XEvent *event) {
         setfocus(selected_monitor->selected_client);
 }
 
+void set_current_monitor(Monitor *monitor) {
+    unfocus(selected_monitor->selected_client, 0);
+    selected_monitor = monitor;
+    focus(NULL);
+}
+
 void focusmon(const Arg *arg) {
     Monitor *monitor;
 
     if (!all_monitors->next)
         return;
+
     if ((monitor = dirtomon(arg->i)) == selected_monitor)
         return;
-    unfocus(selected_monitor->selected_client, 0);
-    selected_monitor = monitor;
-    focus(NULL);
+
+    set_current_monitor(monitor);
 }
 
 void focusstack(const Arg *arg) {
@@ -1187,7 +1202,8 @@ void tile(Monitor *monitor) {
         if (i < monitor->nmaster) {
             height = (monitor->window_height - monitor_y) / (Minimum(n, monitor->nmaster) - i);
             resize(client, monitor->window_x, monitor->window_y + monitor_y, monitor_width - (2*client->border_width), height - (2*client->border_width), 0);
- 			resize(client, monitor->window_x, monitor->window_y + monitor_y, monitor_width - (2*client->border_width) + (n > 1 ? gap_size : 0), height - (2*client->border_width), 0);
+ 			// resize(client, monitor->window_x, monitor->window_y + monitor_y, monitor_width - (2*client->border_width) + (n > 1 ? gap_size : 0), height - (2*client->border_width), 0);
+ 			resize(client, monitor->window_x, monitor->window_y + monitor_y, monitor_width - (2*client->border_width) + gap_size, height - (2*client->border_width), 0);
             if (monitor_y + ClientHeight(client) < monitor->window_height) {
                 monitor_y += ClientHeight(client);
             }
@@ -1261,10 +1277,10 @@ void movemouse(const Arg *arg) {
                     ny = selected_monitor->window_y;
                 else if (abs((selected_monitor->window_y + selected_monitor->window_height) - (ny + ClientHeight(client))) < snap)
                     ny = selected_monitor->window_y + selected_monitor->window_height - ClientHeight(client);
-                if (!client->isfloating && selected_monitor->layouts[selected_monitor->selected_layout]->arrange
+                if (!client->isfloating && layouts[selected_monitor->selected_layout].arrange
                     && (abs(nx - client->x) > snap || abs(ny - client->y) > snap))
                     togglefloating(NULL);
-                if (!selected_monitor->layouts[selected_monitor->selected_layout]->arrange || client->isfloating)
+                if (!layouts[selected_monitor->selected_layout].arrange || client->isfloating)
                     resize(client, nx, ny, client->width, client->height, 1);
                 break;
         }
@@ -1363,18 +1379,18 @@ void resizeclient(Client *client, int x, int y, int width, int height) {
  	for (n = 0, nbc = nexttiled(client->monitor->clients); nbc; nbc = nexttiled(nbc->next), n++);
  
  	/* Do nothing if layout is floating */
- 	if (client->isfloating || client->monitor->layouts[client->monitor->selected_layout]->arrange == NULL) {
+ 	if (client->isfloating || layouts[client->monitor->selected_layout].arrange == NULL) {
  		gapincr = gapoffset = 0;
  	} else {
  		/* Remove border and gap if layout is monocle or only one client */
- 		if (client->monitor->layouts[client->monitor->selected_layout]->arrange == monocle || n == 1) {
- 			gapoffset = 0;
+ 		if (layouts[client->monitor->selected_layout].arrange == monocle || n == 1) {
+ 			// gapoffset = 0;
  			gapincr = -2 * borderpx;
  			wc.border_width = 0;
  		} else {
- 			gapoffset = gap_size;
  			gapincr = 2 * gap_size;
  		}
+        gapoffset = gap_size;
  	}
  
  	client->oldx = client->x; client->x = wc.x = x + gapoffset;
@@ -1424,11 +1440,11 @@ void resizemouse(const Arg *arg) {
                 if (client->monitor->window_x + nw >= selected_monitor->window_x && client->monitor->window_x + nw <= selected_monitor->window_x + selected_monitor->window_width
                     && client->monitor->window_y + nh >= selected_monitor->window_y && client->monitor->window_y + nh <= selected_monitor->window_y + selected_monitor->window_height)
                 {
-                    if (!client->isfloating && selected_monitor->layouts[selected_monitor->selected_layout]->arrange
+                    if (!client->isfloating && layouts[selected_monitor->selected_layout].arrange
                         && (abs(nw - client->width) > snap || abs(nh - client->height) > snap))
                         togglefloating(NULL);
                 }
-                if (!selected_monitor->layouts[selected_monitor->selected_layout]->arrange || client->isfloating)
+                if (!layouts[selected_monitor->selected_layout].arrange || client->isfloating)
                     resize(client, client->x, client->y, nw, nh, 1);
                 break;
         }
@@ -1451,9 +1467,9 @@ void restack(Monitor *monitor) {
     drawbar(monitor);
     if (!monitor->selected_client)
         return;
-    if (monitor->selected_client->isfloating || !monitor->layouts[monitor->selected_layout]->arrange)
+    if (monitor->selected_client->isfloating || !layouts[monitor->selected_layout].arrange)
         XRaiseWindow(global_display, monitor->selected_client->window);
-    if (monitor->layouts[monitor->selected_layout]->arrange) {
+    if (layouts[monitor->selected_layout].arrange) {
         wc.stack_mode = Below;
         wc.sibling = monitor->barwin;
         for (client = monitor->stack; client; client = client->snext)
@@ -1509,7 +1525,7 @@ sendmon(Client *client, Monitor *monitor)
     detach(client);
     detachstack(client);
     client->monitor = monitor;
-    client->tags = monitor->tagset[monitor->selected_tags]; /* assign tags of target monitor */
+    client->tags = monitor->selected_tags; /* assign tags of target monitor */
     attach(client);
     attachstack(client);
     focus(NULL);
@@ -1587,15 +1603,15 @@ void setfullscreen(Client *client, int fullscreen) {
 }
 
 void setlayout(const Arg *arg) {
-    if (!arg || !arg->v || arg->v != selected_monitor->layouts[selected_monitor->selected_layout]) {
+    if (!arg || !arg->v || arg->v != &layouts[selected_monitor->selected_layout]) {
         selected_monitor->selected_layout ^= 1;
     }
 
     if (arg && arg->v) {
-        selected_monitor->layouts[selected_monitor->selected_layout] = (Layout *)arg->v;
+        // layouts[selected_monitor->selected_layout] = (Layout *)arg->v;
     }
 
-    strncpy(selected_monitor->ltsymbol, selected_monitor->layouts[selected_monitor->selected_layout]->symbol, sizeof(selected_monitor->ltsymbol));
+    // strncpy(selected_monitor->ltsymbol, layouts[selected_monitor->selected_layout]->symbol, sizeof(selected_monitor->ltsymbol));
     if (selected_monitor->selected_client) {
         arrange(selected_monitor);
     } else {
@@ -1604,24 +1620,24 @@ void setlayout(const Arg *arg) {
 }
 
 void toggle_layout(const Arg *arg) {
-    Arg layout_arg = {0};
-    const Layout *current_layout = selected_monitor->layouts[selected_monitor->selected_layout];
-
-    // Toggle between tiled and monocle (fullscreen-like layout)
-    if(current_layout == &layouts[0]) {
-        layout_arg.v = &layouts[2];
+    selected_monitor->selected_layout ^= 1;
+    if (selected_monitor->selected_client) {
+        arrange(selected_monitor);
     } else {
-        layout_arg.v = &layouts[0];
+        drawbar(selected_monitor);
     }
 
-    setlayout(&layout_arg);
+    // const Layout *current_layout = layouts[selected_monitor->selected_layout];
+
+    // Toggle between tiled and monocle (fullscreen-like layout)
+    // setlayout(&layout_arg);
 }
 
 /* arg > 1.0 will set mfact absolutely */
 void setmfact(const Arg *arg) {
     float f;
 
-    if (!arg || !selected_monitor->layouts[selected_monitor->selected_layout]->arrange)
+    if (!arg || !layouts[selected_monitor->selected_layout].arrange)
         return;
     f = arg->f < 1.0 ? arg->f + selected_monitor->mfact : arg->f - 1.0;
     if (f < 0.05 || f > 0.95)
@@ -1718,7 +1734,7 @@ void showhide(Client *client) {
     if (IsVisible(client)) {
         /* show clients top down */
         XMoveWindow(global_display, client->window, client->x, client->y);
-        if ((!client->monitor->layouts[client->monitor->selected_layout]->arrange || client->isfloating) && !client->isfullscreen) {
+        if ((!layouts[client->monitor->selected_layout].arrange || client->isfloating) && !client->isfullscreen) {
             resize(client, client->x, client->y, client->width, client->height, 0);
         }
         showhide(client->snext);
@@ -1810,10 +1826,10 @@ void toggletag(const Arg *arg) {
 }
 
 void toggleview(const Arg *arg) {
-    unsigned int newtagset = selected_monitor->tagset[selected_monitor->selected_tags] ^ (arg->ui & TagMask);
+    unsigned int newtagset = selected_monitor->selected_tags ^ (arg->ui & TagMask);
 
     if (newtagset) {
-        selected_monitor->tagset[selected_monitor->selected_tags] = newtagset;
+        selected_monitor->selected_tags = newtagset;
         focus(NULL);
         arrange(selected_monitor);
     }
@@ -1828,11 +1844,10 @@ void change_gap(const Arg *arg) {
     }
 }
 
-void
-unfocus(Client *client, int setfocus)
-{
+void unfocus(Client *client, int setfocus) {
     if (!client)
         return;
+
     grabbuttons(client, 0);
     XSetWindowBorder(global_display, client->window, scheme[SchemeNorm][ColBorder].pixel);
     if (setfocus) {
@@ -1841,9 +1856,7 @@ unfocus(Client *client, int setfocus)
     }
 }
 
-void
-unmanage(Client *client, int destroyed)
-{
+void unmanage(Client *client, int destroyed) {
     Monitor *monitor = client->monitor;
     XWindowChanges wc;
 
@@ -2135,16 +2148,14 @@ void updatewmhints(Client *client) {
 }
 
 void view(const Arg *arg) {
-    if ((arg->ui & TagMask) == selected_monitor->tagset[selected_monitor->selected_tags])
-        return;
+    int new_tags = arg->ui & TagMask;
+    if (new_tags != selected_monitor->selected_tags) {
+        if (new_tags)
+            selected_monitor->selected_tags = new_tags;
 
-    selected_monitor->selected_tags ^= 1; /* toggle sel tagset */
-
-    if (arg->ui & TagMask)
-        selected_monitor->tagset[selected_monitor->selected_tags] = arg->ui & TagMask;
-
-    focus(NULL);
-    arrange(selected_monitor);
+        focus(NULL);
+        arrange(selected_monitor);
+    }
 }
 
 Client *wintoclient(Window window) {
@@ -2203,7 +2214,7 @@ int xerrorstart(Display *display, XErrorEvent *ee) {
 void zoom(const Arg *arg) {
     Client *client = selected_monitor->selected_client;
 
-    if(!selected_monitor->layouts[selected_monitor->selected_layout]->arrange
+    if(!layouts[selected_monitor->selected_layout].arrange
        || (selected_monitor->selected_client && selected_monitor->selected_client->isfloating))
         return;
 
