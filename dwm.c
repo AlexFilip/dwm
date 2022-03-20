@@ -1211,8 +1211,10 @@ void tile(Monitor *monitor) {
                    monitor->window_width - master_width - (2*client->border_width),
                    height - (2*client->border_width) + gap_size,
                    0);
-            if (ty + height < monitor->window_height) {
-                ty += height;
+
+            unsigned int new_ty = ty + height;
+            if (new_ty < monitor->window_height) {
+                ty = new_ty;
             }
         }
     }
@@ -1346,19 +1348,19 @@ void quit(const Arg *arg) {
 }
 
 Monitor *recttomon(int x, int y, int width, int height) {
-    Monitor *monitor, *r = selected_monitor;
-    int area = 0;
+    Monitor *monitor, *result = selected_monitor;
+    int maximum_area = 0;
 
     for (monitor = all_monitors; monitor; monitor = monitor->next) {
-        int intersect = Maximum(0,
-                                Minimum(x + width, monitor->window_x + monitor->window_width)
-                                - Maximum(x, monitor->window_x)) * Maximum(0, Minimum(y + height, monitor->window_y + monitor->window_height) - Maximum(y, monitor->window_y));
-        if (intersect > area) {
-            area = intersect;
-            r = monitor;
+        int x_intersection = Maximum(0, Minimum(x + width,  monitor->window_x + monitor->window_width)  - Maximum(x, monitor->window_x));
+        int y_intersection = Maximum(0, Minimum(y + height, monitor->window_y + monitor->window_height) - Maximum(y, monitor->window_y));
+        int intersection_area = x_intersection * y_intersection;
+        if (intersection_area > maximum_area) {
+            maximum_area = intersection_area;
+            result = monitor;
         }
     }
-    return r;
+    return result;
 }
 
 void resize(Client *client, int x, int y, int width, int height, int interact) {
