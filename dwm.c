@@ -194,7 +194,7 @@ static void clientmessage(XEvent *event);
 static void configure(Client *client);
 static void configurenotify(XEvent *event);
 static void configurerequest(XEvent *event);
-static Monitor *createmon(void);
+static int  createmon(void);
 static void destroynotify(XEvent *event);
 static void detach(Client *client);
 static void detachstack(Client *client);
@@ -259,7 +259,7 @@ static void change_gap(const Arg *arg);
 static void unfocus(Client *client, int setfocus);
 static void unmanage(Client *client, int destroyed);
 static void unmapnotify(XEvent *event);
-static void updatebarpos(Monitor *monitor);
+static void updatebarpos(int monitor_index);
 static void updatebars(void);
 static void updateclientlist(void);
 static int updategeom(void);
@@ -701,19 +701,52 @@ void configurerequest(XEvent *event) {
     XSync(global_display, False);
 }
 
-Monitor *createmon(void) {
-    Monitor *monitor;
+int createmon(void) {
+    Monitor *monitor = NULL;
+    int result_index;
+
+    if(all_monitors) {
+        int monitor_index = 0;
+        for(; monitor_index < monitor_capacity; ++monitor_capacity) {
+            Monitor *current_monitor = &all_monitors[monitor_index];
+            if(!current_monitor->is_valid) {
+                monitor = current_monitor;
+                result_index = monitor_index;
+                break;
+            }
+        }
+
+        if(monitor_index == monitor_capacity) {
+            // expand array, all monitors up to end must be valid to reach this point
+            int new_capacity = monitor_capacity << 1;
+            Monitor *new_buffer = ecalloc(new_capacity, sizeof(Monitor));
+            for(monitor_index = 0; monitor_index < monitor_capacity; ++monitor_capacity) {
+                new_buffer[monitor_index] = all_monitors[monitor_index];
+            }
+
+            // new monitor will be at the end of the new buffer (remember all before this are valid)
+            result_index = monitor_capacity;
+            monitor = &new_buffer[monitor_capacity];
+
+            free(all_monitors);
+            all_monitors = new_buffer;
+            monitor_capacity = new_capacity;
+        }
+
+    } else {
+        monitor_capacity = 2;
+        all_monitors = ecalloc(monitor_capacity, sizeof(Monitor));
+        monitor = all_monitors;
+        result_index = 0;
+    }
 
 
-
-    monitor = ecalloc(1, sizeof(Monitor));
     monitor->selected_tags = 1;
     monitor->mfact = mfact;
-    // monitor->nmaster = nmaster;
     monitor->showbar = showbar;
     monitor->topbar = topbar;
 
-    return monitor;
+    return result_index;
 }
 
 void destroynotify(XEvent *event) {
@@ -1987,7 +2020,9 @@ void updatebars(void) {
     }
 }
 
-void updatebarpos(Monitor *monitor) {
+void updatebarpos(int monitor_index) {
+    Monitor *monitor = &all_monitors[monitor_index];
+
     monitor->window_y = monitor->screen_y;
     monitor->window_height = monitor->screen_height;
     if (monitor->showbar) {
@@ -2000,7 +2035,6 @@ void updatebarpos(Monitor *monitor) {
 
 void updateclientlist() {
     XDeleteProperty(global_display, root, netatom[NetClientList]);
-    // for (Monitor *monitor = all_monitors; monitor; monitor = monitor->next)
     for (int monitor_index = 0; monitor_index < monitor_capacity; ++monitor_index) {
         Monitor *monitor = &all_monitors[monitor_index];
         if(monitor->is_valid) {
@@ -2037,17 +2071,7 @@ int updategeom(void) {
         num_screens = j;
         if (monitor_count <= num_screens) { /* new monitors available */
             for (i = 0; i < (num_screens - monitor_count); i++) {
-                // Monitor *new_monitor =
                 createmon();
-
-                // if(all_monitors) {
-                //     Monitor *current_monitor = all_monitors;
-                //     for (; current_monitor->next; current_monitor = current_monitor->next) {
-                //     }
-                //     current_monitor->next = new_monitor;
-                // } else {
-                //     all_monitors = new_monitor;
-                // }
             }
 
             for (int i = 0, monitor_index = 0; i < num_screens;) {
@@ -2065,7 +2089,7 @@ int updategeom(void) {
                         current_monitor->screen_y = current_monitor->window_y = unique[i].y_org;
                         current_monitor->screen_width = current_monitor->window_width = unique[i].width;
                         current_monitor->screen_height = current_monitor->window_height = unique[i].height;
-                        updatebarpos(current_monitor);
+                        updatebarpos(monitor_index);
                     }
                     i++;
                 }
@@ -2097,12 +2121,17 @@ int updategeom(void) {
 #endif /* XINERAMA */
     { /* default monitor setup */
         if (!all_monitors)
-            all_monitors = createmon();
+            createmon();
+
         if (all_monitors->screen_width != screen_width || all_monitors->screen_height != screen_height) {
             dirty = 1;
-            all_monitors->screen_width = all_monitors->window_width = screen_width;
-            all_monitors->screen_height = all_monitors->window_height = screen_height;
-            updatebarpos(all_monitors);
+            int first_monitor_index = first_valid_monitor();
+            Monitor *first_monitor = &all_monitors[first_monitor_index];
+
+            first_monitor->screen_width  = first_monitor->window_width = screen_width;
+            first_monitor->screen_height = first_monitor->window_height = screen_height;
+
+            updatebarpos(first_monitor_index);
         }
     }
     if (dirty) {
