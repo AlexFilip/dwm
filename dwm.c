@@ -186,25 +186,16 @@ static void arrange(int monitor_index);
 static void arrangemon(int monitor_index);
 static void attach(Client *client);
 static void attachstack(Client *client);
-static void buttonpress(XEvent *event);
 static void checkotherwm(void);
-static void cleanup(void);
 static void cleanup_monitors(int monitor_index);
-static void clientmessage(XEvent *event);
 static void configure(Client *client);
-static void configurenotify(XEvent *event);
-static void configurerequest(XEvent *event);
 static int  createmon(void);
-static void destroynotify(XEvent *event);
 static void detach(Client *client);
 static void detachstack(Client *client);
 static int dirtomon(int dir);
 static void drawbar(int monitor_index);
 static void drawbars(void);
-static void enternotify(XEvent *event);
-static void expose(XEvent *event);
 static void focus(Client *client);
-static void focusin(XEvent *event);
 static void focusmon(const Arg *arg);
 static void focusstack(const Arg *arg);
 static Atom getatomprop(Client *client, Atom prop);
@@ -215,25 +206,18 @@ static int gettextprop(Window window, Atom atom, char *text, unsigned int size);
 static void grabbuttons(Client *client, int focused);
 static void grabkeys(void);
 // static void incnmaster(const Arg *arg);
-static void keypress(XEvent *event);
 static void killclient(const Arg *arg);
 static void manage(Window window, XWindowAttributes *wa);
-static void mappingnotify(XEvent *event);
-static void maprequest(XEvent *event);
 static void monocle(int monitor_index);
-static void motionnotify(XEvent *event);
 static void movemouse(const Arg *arg);
 static Client *nexttiled(Client *client);
 static void pop(Client *);
-static void propertynotify(XEvent *event);
 static void quit(const Arg *arg);
 static int  recttomon(int x, int y, int width, int height);
 static void resize(Client *client, int x, int y, int width, int height, int interact);
 static void resizeclient(Client *client, int x, int y, int width, int height);
 static void resizemouse(const Arg *arg);
 static void restack(int monitor_index);
-static void run(void);
-static void scan(void);
 static int sendevent(Client *client, Atom proto);
 static void sendmon(Client *client, int monitor_index);
 static void setclientstate(Client *client, long state);
@@ -258,7 +242,6 @@ static void toggleview(const Arg *arg);
 static void change_gap(const Arg *arg);
 static void unfocus(Client *client, int setfocus);
 static void unmanage(Client *client, int destroyed);
-static void unmapnotify(XEvent *event);
 static void updatebarpos(int monitor_index);
 static void updatebars(void);
 static void updateclientlist(void);
@@ -276,7 +259,12 @@ static int xerror(Display *display, XErrorEvent *ee);
 static int xerrordummy(Display *display, XErrorEvent *ee);
 static int xerrorstart(Display *display, XErrorEvent *ee);
 static void zoom(const Arg *arg);
-static int first_valid_monitor();
+static int next_valid_monitor(int start_index);
+
+// The only 3 event functions that are still necessary
+static void configurerequest(XEvent *event);
+static void expose(XEvent *event);
+static void maprequest(XEvent *event);
 
 /* variables */
 static const char broken[] = "broken";
@@ -291,23 +279,23 @@ static int lrpad;            /* sum of left and right padding for text */
 static int (*xerrorxlib)(Display *, XErrorEvent *);
 static unsigned int numlockmask = 0;
 
-typedef void Handler(XEvent*);
-static Handler* handler[LASTEvent] = {
-    [ButtonPress] = buttonpress,
-    [ClientMessage] = clientmessage,
-    [ConfigureRequest] = configurerequest,
-    [ConfigureNotify] = configurenotify,
-    [DestroyNotify] = destroynotify,
-    [EnterNotify] = enternotify,
-    [Expose] = expose,
-    [FocusIn] = focusin,
-    [KeyPress] = keypress,
-    [MappingNotify] = mappingnotify,
-    [MapRequest] = maprequest,
-    [MotionNotify] = motionnotify,
-    [PropertyNotify] = propertynotify,
-    [UnmapNotify] = unmapnotify
-};
+// typedef void Handler(XEvent*);
+// static Handler* handler[LASTEvent] = {
+//     [ButtonPress] = buttonpress,
+//     [ClientMessage] = clientmessage,
+//     [ConfigureRequest] = configurerequest,
+//     [ConfigureNotify] = configurenotify,
+//     [DestroyNotify] = destroynotify,
+//     [EnterNotify] = enternotify,
+//     [Expose] = expose,
+//     [FocusIn] = focusin,
+//     [KeyPress] = keypress,
+//     [MappingNotify] = mappingnotify,
+//     [MapRequest] = maprequest,
+//     [MotionNotify] = motionnotify,
+//     [PropertyNotify] = propertynotify,
+//     [UnmapNotify] = unmapnotify
+// };
 
 static Atom wmatom[WMLast], netatom[NetLast];
 static int global_running = 1;
@@ -455,8 +443,8 @@ void arrangemon(int monitor_index) {
     layouts[all_monitors[monitor_index].selected_layout].arrange(monitor_index);
 }
 
-static int first_valid_monitor() {
-    int result = 0;
+int next_valid_monitor(int start_index) {
+    int result = start_index;
     for (; result < monitor_capacity; ++result) {
         if(all_monitors[result].is_valid) {
             break;
@@ -481,7 +469,6 @@ void buttonpress(XEvent *event) {
     unsigned int i, x;
     Arg arg = {0};
     Client *client;
-    // Monitor *monitor;
     XButtonPressedEvent *ev = &event->xbutton;
  	char *text, *s, ch;
 
@@ -551,36 +538,6 @@ void checkotherwm(void) {
     XSync(global_display, False);
     XSetErrorHandler(xerror);
     XSync(global_display, False);
-}
-
-void cleanup(void) {
-    Arg a = { .ui = ~0 };
-    // Layout foo = { "", NULL };
-    // Monitor *monitor;
-    size_t i;
-
-    view(&a);
-    // selected_monitor->layouts[selected_monitor->selected_layout] = &foo;
-    
-    for (int monitor_index = 0; monitor_index < monitor_capacity; ++monitor_index)
-        while (all_monitors[monitor_index].stack)
-            unmanage(all_monitors[monitor_index].stack, 0);
-
-    XUngrabKey(global_display, AnyKey, AnyModifier, root);
-    for(int monitor_index = 0; monitor_index < monitor_capacity; ++monitor_index) {
-        if(all_monitors[monitor_index].is_valid) {
-            cleanup_monitors(monitor_index);
-        }
-    }
-    for (i = 0; i < CurLast; i++)
-        drw_cur_free(drw, cursor[i]);
-    for (i = 0; i < ArrayLength(colors); i++)
-        free(scheme[i]);
-    XDestroyWindow(global_display, wmcheckwin);
-    drw_free(drw);
-    XSync(global_display, False);
-    XSetInputFocus(global_display, PointerRoot, RevertToPointerRoot, CurrentTime);
-    XDeleteProperty(global_display, root, netatom[NetActiveWindow]);
 }
 
 void cleanup_monitors(int monitor_index) {
@@ -886,13 +843,12 @@ void drawbars(void) {
 
 void enternotify(XEvent *event) {
     Client *client;
-    int monitor_index;
     XCrossingEvent *ev = &event->xcrossing;
 
     if ((ev->mode != NotifyNormal || ev->detail == NotifyInferior) && ev->window != root)
         return;
     client = wintoclient(ev->window);
-    monitor_index = client ? client->monitor : wintomon(ev->window);
+    int monitor_index = client ? client->monitor : wintomon(ev->window);
     if (monitor_index != selected_monitor) {
         unfocus(all_monitors[selected_monitor].selected_client, 1);
         selected_monitor = monitor_index;
@@ -1232,11 +1188,6 @@ void manage(Window window, XWindowAttributes *wa) {
 }
 
 void mappingnotify(XEvent *event) {
-    XMappingEvent *ev = &event->xmapping;
-
-    XRefreshKeyboardMapping(ev);
-    if (ev->request == MappingKeyboard)
-        grabkeys();
 }
 
 void maprequest(XEvent *event) {
@@ -1323,23 +1274,6 @@ void tile(int monitor_index) {
 
 // --
 
-void motionnotify(XEvent *event) {
-    int previous_monitor_index = -1;
-    XMotionEvent *ev = &event->xmotion;
-
-    if (ev->window != root)
-        return;
-
-    int monitor_index = recttomon(ev->x_root, ev->y_root, 1, 1);
-    if (monitor_index != previous_monitor_index && previous_monitor_index >= 0) {
-        unfocus(all_monitors[selected_monitor].selected_client, 1);
-        selected_monitor = monitor_index;
-        focus(NULL);
-    }
-
-    previous_monitor_index = monitor_index;
-}
-
 void movemouse(const Arg *arg) {
     int x, y, ocx, ocy, nx, ny;
     Client *client;
@@ -1365,10 +1299,17 @@ void movemouse(const Arg *arg) {
         XMaskEvent(global_display, MouseMask|ExposureMask|SubstructureRedirectMask, &ev);
         switch(ev.type) {
             case ConfigureRequest:
-            case Expose:
-            case MapRequest:
-                handler[ev.type](&ev);
+                configurerequest(&ev);
                 break;
+
+            case Expose:
+                expose(&ev);
+                break;
+
+            case MapRequest:
+                maprequest(&ev);
+                break;
+
             case MotionNotify:
                 if ((ev.xmotion.time - lasttime) <= (1000 / 60))
                     continue;
@@ -1414,38 +1355,6 @@ void pop(Client *client) {
 }
 
 void propertynotify(XEvent *event) {
-    Client *client;
-    Window trans;
-    XPropertyEvent *ev = &event->xproperty;
-
-    if ((ev->window == root) && (ev->atom == XA_WM_NAME))
-        updatestatus();
-    else if (ev->state == PropertyDelete)
-        return; /* ignore */
-    else if ((client = wintoclient(ev->window))) {
-        switch(ev->atom) {
-            default: break;
-            case XA_WM_TRANSIENT_FOR:
-                     if (!client->isfloating && (XGetTransientForHint(global_display, client->window, &trans)) &&
-                         (client->isfloating = (wintoclient(trans)) != NULL))
-                         arrange(client->monitor);
-                     break;
-            case XA_WM_NORMAL_HINTS:
-                     updatesizehints(client);
-                     break;
-            case XA_WM_HINTS:
-                     updatewmhints(client);
-                     drawbars();
-                     break;
-        }
-        if (ev->atom == XA_WM_NAME || ev->atom == netatom[NetWMName]) {
-            updatetitle(client);
-            if (client == all_monitors[client->monitor].selected_client)
-                drawbar(client->monitor);
-        }
-        if (ev->atom == netatom[NetWMWindowType])
-            updatewindowtype(client);
-    }
 }
 
 void quit(const Arg *arg) {
@@ -1536,9 +1445,13 @@ void resizemouse(const Arg *arg) {
         XMaskEvent(global_display, MouseMask|ExposureMask|SubstructureRedirectMask, &ev);
         switch(ev.type) {
             case ConfigureRequest:
+                configurerequest(&ev);
+                break;
             case Expose:
+                expose(&ev);
+                break;
             case MapRequest:
-                handler[ev.type](&ev);
+                maprequest(&ev);
                 break;
             case MotionNotify:
                 if ((ev.xmotion.time - lasttime) <= (1000 / 60))
@@ -1595,40 +1508,8 @@ void restack(int monitor_index) {
         }
     }
     XSync(global_display, False);
-    while (XCheckMaskEvent(global_display, EnterWindowMask, &ev));
-}
-
-void run(void) {
-    XEvent ev;
-    /* main event loop */
-    XSync(global_display, False);
-    while (global_running && !XNextEvent(global_display, &ev))
-        if (handler[ev.type])
-            handler[ev.type](&ev); /* call handler */
-}
-
-void scan(void) {
-    unsigned int i, num;
-    Window d1, d2, *wins = NULL;
-    XWindowAttributes wa;
-
-    if (XQueryTree(global_display, root, &d1, &d2, &wins, &num)) {
-        for (i = 0; i < num; i++) {
-            if (!XGetWindowAttributes(global_display, wins[i], &wa)
-                || wa.override_redirect || XGetTransientForHint(global_display, wins[i], &d1))
-                continue;
-            if (wa.map_state == IsViewable || getstate(wins[i]) == IconicState)
-                manage(wins[i], &wa);
-        }
-        for (i = 0; i < num; i++) { /* now the transients */
-            if (!XGetWindowAttributes(global_display, wins[i], &wa))
-                continue;
-            if (XGetTransientForHint(global_display, wins[i], &d1)
-                && (wa.map_state == IsViewable || getstate(wins[i]) == IconicState))
-                manage(wins[i], &wa);
-        }
-        if (wins)
-            XFree(wins);
+    while (XCheckMaskEvent(global_display, EnterWindowMask, &ev)) {
+        int k = 123;
     }
 }
 
@@ -1987,18 +1868,6 @@ void unmanage(Client *client, int destroyed) {
     arrange(monitor);
 }
 
-void unmapnotify(XEvent *event) {
-    Client *client;
-    XUnmapEvent *ev = &event->xunmap;
-
-    if ((client = wintoclient(ev->window))) {
-        if (ev->send_event)
-            setclientstate(client, WithdrawnState);
-        else
-            unmanage(client, 0);
-    }
-}
-
 void updatebars(void) {
     XSetWindowAttributes wa = {
         .override_redirect = True,
@@ -2106,12 +1975,12 @@ int updategeom(void) {
                     dirty = 1;
                     monitor->clients = client->next;
                     detachstack(client);
-                    client->monitor = first_valid_monitor();
+                    client->monitor = next_valid_monitor(0);
                     attach(client);
                     attachstack(client);
                 }
                 if (monitor_index == selected_monitor) {
-                    selected_monitor = first_valid_monitor();
+                    selected_monitor = next_valid_monitor(0);
                 }
 
                 cleanup_monitors(monitor_index);
@@ -2124,11 +1993,10 @@ int updategeom(void) {
         if (!all_monitors)
             createmon();
 
-        if (all_monitors->screen_width != screen_width || all_monitors->screen_height != screen_height) {
+        int first_monitor_index = next_valid_monitor(0);
+        Monitor *first_monitor = &all_monitors[first_monitor_index];
+        if (first_monitor->screen_width != screen_width || first_monitor->screen_height != screen_height) {
             dirty = 1;
-            int first_monitor_index = first_valid_monitor();
-            Monitor *first_monitor = &all_monitors[first_monitor_index];
-
             first_monitor->screen_width  = first_monitor->window_width = screen_width;
             first_monitor->screen_height = first_monitor->window_height = screen_height;
 
@@ -2137,7 +2005,7 @@ int updategeom(void) {
     }
     if (dirty) {
         // wintomon will return selected_monitor as a fallback
-        selected_monitor = first_valid_monitor();
+        selected_monitor = next_valid_monitor(0);
         selected_monitor = wintomon(root);
     }
     return dirty;
@@ -2272,9 +2140,11 @@ void view(const Arg *arg) {
 Client *wintoclient(Window window) {
     for(int monitor_index = 0; monitor_index < monitor_capacity; ++monitor_index) {
         Monitor* monitor = &all_monitors[monitor_index];
-        for (Client *client = monitor->clients; client; client = client->next)
-            if (client->window == window)
-                return client;
+        if(monitor->is_valid) {
+            for (Client *client = monitor->clients; client; client = client->next)
+                if (client->window == window)
+                    return client;
+        }
     }
     return NULL;
 }
@@ -2286,8 +2156,9 @@ int wintomon(Window window) {
 
     for(int monitor_index = 0; monitor_index < monitor_capacity; ++monitor_index) {
         Monitor *monitor = &all_monitors[monitor_index];
-        if (monitor->is_valid && window == monitor->barwin)
+        if (monitor->is_valid && window == monitor->barwin) {
             return monitor_index;
+        }
     }
 
     Client *client = NULL;
@@ -2354,10 +2225,186 @@ int main(int argc, char *argv[]) {
     if (pledge("stdio rpath proc exec", NULL) == -1)
         die("pledge");
 #endif /* __OpenBSD__ */
-    scan();
-    run();
-    cleanup();
+
+    // setup
+    unsigned int i, num;
+    Window d1, d2, *wins = NULL;
+    XWindowAttributes wa;
+
+    if (XQueryTree(global_display, root, &d1, &d2, &wins, &num)) {
+        for (i = 0; i < num; i++) {
+            if (!XGetWindowAttributes(global_display, wins[i], &wa)
+                || wa.override_redirect || XGetTransientForHint(global_display, wins[i], &d1))
+                continue;
+            if (wa.map_state == IsViewable || getstate(wins[i]) == IconicState)
+                manage(wins[i], &wa);
+        }
+        for (i = 0; i < num; i++) { /* now the transients */
+            if (!XGetWindowAttributes(global_display, wins[i], &wa))
+                continue;
+            if (XGetTransientForHint(global_display, wins[i], &d1)
+                && (wa.map_state == IsViewable || getstate(wins[i]) == IconicState))
+                manage(wins[i], &wa);
+        }
+        if (wins)
+            XFree(wins);
+    }
+
+    // run
+    XEvent event;
+    /* main event loop */
+    XSync(global_display, False);
+    while (global_running && !XNextEvent(global_display, &event)) {
+        switch (event.type) {
+            case ButtonPress: {
+                buttonpress(&event);
+            }
+
+            case ClientMessage: {
+                clientmessage(&event);
+            }
+
+            case ConfigureRequest: {
+                configurerequest(&event);
+            }
+
+            case ConfigureNotify: {
+                configurenotify(&event);
+            }
+
+            case DestroyNotify: {
+                destroynotify(&event);
+            }
+
+            case EnterNotify: {
+                enternotify(&event);
+            }
+
+            case Expose: {
+                expose(&event);
+            }
+
+            case FocusIn: {
+                focusin(&event);
+            }
+
+            case KeyPress: {
+                keypress(&event);
+            }
+
+            case MappingNotify: {
+                XMappingEvent *ev = &event.xmapping;
+
+                XRefreshKeyboardMapping(ev);
+                if (ev->request == MappingKeyboard)
+                    grabkeys();
+            }
+
+            case MapRequest: {
+                maprequest(&event);
+            }
+
+            case MotionNotify: {
+                static int previous_monitor_index = -1;
+                XMotionEvent *ev = &event.xmotion;
+
+                if (ev->window == root) {
+                    int monitor_index = recttomon(ev->x_root, ev->y_root, 1, 1);
+                    if (monitor_index != previous_monitor_index && previous_monitor_index >= 0) {
+                        unfocus(all_monitors[selected_monitor].selected_client, 1);
+                        selected_monitor = monitor_index;
+                        focus(NULL);
+                    }
+
+                    previous_monitor_index = monitor_index;
+                }
+            }
+
+            case PropertyNotify: {
+                Client *client;
+                Window trans;
+                XPropertyEvent *ev = &event.xproperty;
+
+                if ((ev->window == root) && (ev->atom == XA_WM_NAME)) {
+                    updatestatus();
+                } else if (ev->state == PropertyDelete) {
+                    /* ignore */
+                } else if ((client = wintoclient(ev->window))) {
+                    switch(ev->atom) {
+                        default: break;
+                        case XA_WM_TRANSIENT_FOR:
+                                 if (!client->isfloating && (XGetTransientForHint(global_display, client->window, &trans)) &&
+                                     (client->isfloating = (wintoclient(trans)) != NULL))
+                                     arrange(client->monitor);
+                                 break;
+                        case XA_WM_NORMAL_HINTS:
+                                 updatesizehints(client);
+                                 break;
+                        case XA_WM_HINTS:
+                                 updatewmhints(client);
+                                 drawbars();
+                                 break;
+                    }
+                    if (ev->atom == XA_WM_NAME || ev->atom == netatom[NetWMName]) {
+                        updatetitle(client);
+                        if (client == all_monitors[client->monitor].selected_client)
+                            drawbar(client->monitor);
+                    }
+                    if (ev->atom == netatom[NetWMWindowType])
+                        updatewindowtype(client);
+                }
+            }
+
+            case UnmapNotify: {
+                Client *client;
+                XUnmapEvent *unmap_event = &event.xunmap;
+
+                if ((client = wintoclient(unmap_event->window))) {
+                    if (unmap_event->send_event)
+                        setclientstate(client, WithdrawnState);
+                    else
+                        unmanage(client, 0);
+                }
+            }
+        }
+
+        // if (handler[event.type]) {
+        //     handler[event.type](&event); /* call handler */
+        // }
+    }
+
+    // cleanup
+    Arg a = { .ui = ~0 };
+
+    view(&a);
+    
+    for (int monitor_index = 0; monitor_index < monitor_capacity; ++monitor_index) {
+        Monitor *monitor = &all_monitors[monitor_index];
+        if(monitor->is_valid) {
+            while (monitor->stack)
+                unmanage(monitor->stack, 0);
+        }
+    }
+
+    XUngrabKey(global_display, AnyKey, AnyModifier, root);
+    for(int monitor_index = 0; monitor_index < monitor_capacity; ++monitor_index) {
+        if(all_monitors[monitor_index].is_valid) {
+            cleanup_monitors(monitor_index);
+        }
+    }
+
+    for (size_t i = 0; i < CurLast; i++)
+        drw_cur_free(drw, cursor[i]);
+    for (size_t i = 0; i < ArrayLength(colors); i++)
+        free(scheme[i]);
+
+    XDestroyWindow(global_display, wmcheckwin);
+    drw_free(drw);
+    XSync(global_display, False);
+    XSetInputFocus(global_display, PointerRoot, RevertToPointerRoot, CurrentTime);
+    XDeleteProperty(global_display, root, netatom[NetActiveWindow]);
     XCloseDisplay(global_display);
+
     return EXIT_SUCCESS;
 }
 

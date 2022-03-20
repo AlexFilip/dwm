@@ -229,7 +229,8 @@ void drw_rect(Drw *drw, int x, int y, unsigned int width, unsigned int h, int fi
         XDrawRectangle(drw->display, drw->drawable, drw->gc, x, y, width - 1, h - 1);
 }
 
-int drw_text(Drw *drw, int x, int y, unsigned int width, unsigned int height, unsigned int lpad, const char *text, int invert) {
+int drw_text(Drw *drw, int x, int y, unsigned int start_width, unsigned int height, unsigned int lpad, const char *text, int invert) {
+    unsigned int width = start_width;
     char buf[1024];
     unsigned int ew;
     XftDraw *d = NULL;
