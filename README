@@ -46,3 +46,10 @@ Configuration
 -------------
 The configuration of dwm is done by creating a custom config.h
 and (re)compiling the source code.
+
+Debug instructions
+------------------
+
+To run a nested X session and debug dwm you need Xnest installed
+With it run `Xnest :1` in one terminal and `DISPLAY=:1 ./dwm` in another. If you generate debug symbols with `-g` you can use gdb with `DISPLAY=:1 gdb ./dwm`.
+Additionally, the config.h for this project changes the modifier key to Alt if you define `DEBUG` with `-DDEBUG`.
