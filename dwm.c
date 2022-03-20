@@ -745,6 +745,7 @@ int createmon(void) {
     monitor->mfact = mfact;
     monitor->showbar = showbar;
     monitor->topbar = topbar;
+    monitor->is_valid = 1;
 
     return result_index;
 }
