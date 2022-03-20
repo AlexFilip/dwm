@@ -22,6 +22,7 @@
  */
 
 /* TODO:
+ *  - FIX: after making the gap size 0, when you try to make it smaller, only some windows resize
  *  - Change monitor and client list from linked-list to array
  *    - Instead of holding raw pointers to monitors and clients, use indices into the array (selected_monitor and variables like it become integers)
  *  - Create a secondary process that loads a dynamic library and runs it
@@ -65,8 +66,9 @@
 #define IsVisible(Client)            ((Client->tags & Client->monitor->selected_tags))
 #define ArrayLength(X)          (sizeof(X) / sizeof((X)[0]))
 #define MouseMask               (ButtonMask|PointerMotionMask)
-#define ClientWidth(Client)     ((Client)->width + 2 * (Client)->border_width + gap_size)
-#define ClientHeight(Client)    ((Client)->height + 2 * (Client)->border_width + gap_size)
+
+#define GappedClientWidth(Client)     ((Client)->width + 2 * (Client)->border_width + gap_size)
+#define GappedClientHeight(Client)    ((Client)->height + 2 * (Client)->border_width + gap_size)
 #define TagMask                 ((1 << ArrayLength(tags)) - 1)
 #define TEXTW(X)                (drw_fontset_getwidth(drw, (X)) + lrpad)
 
@@ -276,7 +278,7 @@ static int statusw;
 static int statussig;
 static pid_t statuspid = -1;
 static int screen;
-static int sw, sh;           /* X global_display screen geometry width, height */
+static int screen_width, screen_height;           /* X global_display screen geometry width, height */
 static int bh, blw = 0;      /* bar geometry */
 static int lrpad;            /* sum of left and right padding for text */
 static int (*xerrorxlib)(Display *, XErrorEvent *);
@@ -320,26 +322,23 @@ struct NumTags { char limitexceeded[ArrayLength(tags) > 31 ? -1 : 1]; };
 
 /* function implementations */
 void applyrules(Client *client) {
-    const char *class, *instance;
-    unsigned int i;
-    Monitor *monitor;
     XClassHint ch = { NULL, NULL };
 
     /* rule matching */
     client->isfloating = 0;
     client->tags = 0;
     XGetClassHint(global_display, client->window, &ch);
-    class    = ch.res_class ? ch.res_class : broken;
-    instance = ch.res_name  ? ch.res_name  : broken;
+    const char *class    = ch.res_class ? ch.res_class : broken;
+    const char *instance = ch.res_name  ? ch.res_name  : broken;
 
-    for (i = 0; i < ArrayLength(rules); i++) {
+    for (unsigned int i = 0; i < ArrayLength(rules); i++) {
         const Rule *rule = &rules[i];
         if ((!rule->title || strstr(client->name, rule->title))
         && (!rule->class || strstr(class, rule->class))
-        && (!rule->instance || strstr(instance, rule->instance)))
-        {
+        && (!rule->instance || strstr(instance, rule->instance))) {
             client->isfloating = rule->isfloating;
             client->tags |= rule->tags;
+            Monitor *monitor;
             for (monitor = all_monitors; monitor && monitor->num != rule->monitor_number; monitor = monitor->next){
                 // do nothing, find monitor
             }
@@ -362,28 +361,30 @@ int applysizehints(Client *client, int *x, int *y, int *width, int *height, int 
     *width = Maximum(1, *width);
     *height = Maximum(1, *height);
     if (interact) {
-        if (*x > sw)
-            *x = sw - ClientWidth(client);
-        if (*y > sh)
-            *y = sh - ClientHeight(client);
+        if (*x > screen_width)
+            *x = screen_width - GappedClientWidth(client);
+        if (*y > screen_height)
+            *y = screen_height - GappedClientHeight(client);
         if (*x + *width + 2 * client->border_width < 0)
             *x = 0;
         if (*y + *height + 2 * client->border_width < 0)
             *y = 0;
     } else {
         if (*x >= monitor->window_x + monitor->window_width)
-            *x = monitor->window_x + monitor->window_width - ClientWidth(client);
+            *x = monitor->window_x + monitor->window_width - GappedClientWidth(client);
         if (*y >= monitor->window_y + monitor->window_height)
-            *y = monitor->window_y + monitor->window_height - ClientHeight(client);
+            *y = monitor->window_y + monitor->window_height - GappedClientHeight(client);
         if (*x + *width + 2 * client->border_width <= monitor->window_x)
             *x = monitor->window_x;
         if (*y + *height + 2 * client->border_width <= monitor->window_y)
             *y = monitor->window_y;
     }
+
     if (*height < bh)
         *height = bh;
     if (*width < bh)
         *width = bh;
+
     if (resizehints || client->isfloating) {
         /* see last two sentences in ICCCM 4.1.2.3 */
         baseismin = client->base_width == client->min_width && client->base_height == client->min_height;
@@ -415,19 +416,22 @@ int applysizehints(Client *client, int *x, int *y, int *width, int *height, int 
         if (client->max_height)
             *height = Minimum(*height, client->max_height);
     }
+
     return *x != client->x || *y != client->y || *width != client->width || *height != client->height;
 }
 
 void arrange(Monitor *monitor) {
-    if (monitor)
-        showhide(monitor->stack);
-    else for (monitor = all_monitors; monitor; monitor = monitor->next)
-        showhide(monitor->stack);
     if (monitor) {
+        showhide(monitor->stack);
         arrangemon(monitor);
         restack(monitor);
-    } else for (monitor = all_monitors; monitor; monitor = monitor->next)
-        arrangemon(monitor);
+    } else {
+        for (monitor = all_monitors; monitor; monitor = monitor->next) {
+            showhide(monitor->stack);
+            arrangemon(monitor);
+            restack(monitor);
+        }
+    }
 }
 
 void arrangemon(Monitor *monitor) {
@@ -600,11 +604,11 @@ void configurenotify(XEvent *event) {
 
     /* TODO: updategeom handling sucks, needs to be simplified */
     if (ev->window == root) {
-        dirty = (sw != ev->width || sh != ev->height);
-        sw = ev->width;
-        sh = ev->height;
+        dirty = (screen_width != ev->width || screen_height != ev->height);
+        screen_width = ev->width;
+        screen_height = ev->height;
         if (updategeom() || dirty) {
-            drw_resize(drw, sw, bh);
+            drw_resize(drw, screen_width, bh);
             updatebars();
             for (monitor = all_monitors; monitor; monitor = monitor->next) {
                 for (client = monitor->clients; client; client = client->next)
@@ -646,9 +650,9 @@ void configurerequest(XEvent *event) {
                 client->height = ev->height;
             }
             if ((client->x + client->width) > monitor->screen_x + monitor->screen_width && client->isfloating)
-                client->x = monitor->screen_x + (monitor->screen_width / 2 - ClientWidth(client) / 2); /* center in x direction */
+                client->x = monitor->screen_x + (monitor->screen_width / 2 - GappedClientWidth(client) / 2); /* center in x direction */
             if ((client->y + client->height) > monitor->screen_y + monitor->screen_height && client->isfloating)
-                client->y = monitor->screen_y + (monitor->screen_height / 2 - ClientHeight(client) / 2); /* center in y direction */
+                client->y = monitor->screen_y + (monitor->screen_height / 2 - GappedClientHeight(client) / 2); /* center in y direction */
             if ((ev->value_mask & (CWX|CWY)) && !(ev->value_mask & (CWWidth|CWHeight)))
                 configure(client);
             if (IsVisible(client))
@@ -824,8 +828,10 @@ void expose(XEvent *event) {
 void focus(Client *client) {
     if (!client || !IsVisible(client))
         for (client = selected_monitor->stack; client && !IsVisible(client); client = client->snext);
+
     if (selected_monitor->selected_client && selected_monitor->selected_client != client)
         unfocus(selected_monitor->selected_client, 0);
+
     if (client) {
         if (client->monitor != selected_monitor)
             selected_monitor = client->monitor;
@@ -1089,10 +1095,10 @@ void manage(Window window, XWindowAttributes *wa) {
         applyrules(client);
     }
 
-    if (client->x + ClientWidth(client) > client->monitor->screen_x + client->monitor->screen_width)
-        client->x = client->monitor->screen_x + client->monitor->screen_width - ClientWidth(client);
-    if (client->y + ClientHeight(client) > client->monitor->screen_y + client->monitor->screen_height)
-        client->y = client->monitor->screen_y + client->monitor->screen_height - ClientHeight(client);
+    if (client->x + GappedClientWidth(client) > client->monitor->screen_x + client->monitor->screen_width)
+        client->x = client->monitor->screen_x + client->monitor->screen_width - GappedClientWidth(client);
+    if (client->y + GappedClientHeight(client) > client->monitor->screen_y + client->monitor->screen_height)
+        client->y = client->monitor->screen_y + client->monitor->screen_height - GappedClientHeight(client);
     client->x = Maximum(client->x, client->monitor->screen_x);
     /* only fix client y-offset, if the client center might cover the bar */
     client->y = Maximum(client->y, ((client->monitor->bar_height == client->monitor->screen_y) && (client->x + (client->width / 2) >= client->monitor->window_x)
@@ -1116,7 +1122,7 @@ void manage(Window window, XWindowAttributes *wa) {
     attachstack(client);
     XChangeProperty(global_display, root, netatom[NetClientList], XA_WINDOW, 32, PropModeAppend,
                     (unsigned char *) &(client->window), 1);
-    XMoveResizeWindow(global_display, client->window, client->x + 2 * sw, client->y, client->width, client->height); /* some windows require this */
+    XMoveResizeWindow(global_display, client->window, client->x + 2 * screen_width, client->y, client->width, client->height); /* some windows require this */
     setclientstate(client, NormalState);
     if (client->monitor == selected_monitor)
         unfocus(selected_monitor->selected_client, 0);
@@ -1158,40 +1164,61 @@ void monocle(Monitor *monitor) {
     }
 
     for (client = nexttiled(monitor->clients); client; client = nexttiled(client->next)) {
-        resize(client, monitor->window_x, monitor->window_y, monitor->window_width - 2 * client->border_width, monitor->window_height - 2 * client->border_width, 0);
+        resize(client,
+               monitor->window_x,
+               monitor->window_y,
+               monitor->window_width, //  - 2 * client->border_width,
+               monitor->window_height, //  - 2 * client->border_width,
+               0);
     }
 }
 
 void tile(Monitor *monitor) {
-    unsigned int n;
+    unsigned int num_clients;
     Client *client = nexttiled(monitor->clients);
 
-    for (n = 0; client; client = nexttiled(client->next), n++) {
+    for (num_clients = 0; client; client = nexttiled(client->next), num_clients++) {
     }
-    if (n == 0)
+
+    if (num_clients == 0)
         return;
 
-    unsigned int monitor_width = (n > monitor->nmaster) ?
-      (monitor->nmaster ? monitor->window_width * monitor->mfact : 0) :
-      (monitor->window_width);
-
-    unsigned int ty = 0;
     client = nexttiled(monitor->clients);
-    for (unsigned int i = 0, monitor_y = 0; client != NULL; client = nexttiled(client->next), i++) {
-        unsigned int height = 0;
-        if (i < monitor->nmaster) {
-            height = (monitor->window_height - monitor_y) / (Minimum(n, monitor->nmaster) - i);
-            resize(client, monitor->window_x, monitor->window_y + monitor_y, monitor_width - (2*client->border_width), height - (2*client->border_width), 0);
- 			// resize(client, monitor->window_x, monitor->window_y + monitor_y, monitor_width - (2*client->border_width) + (n > 1 ? gap_size : 0), height - (2*client->border_width), 0);
- 			resize(client, monitor->window_x, monitor->window_y + monitor_y, monitor_width - (2*client->border_width) + gap_size, height - (2*client->border_width), 0);
-            if (monitor_y + ClientHeight(client) < monitor->window_height) {
-                monitor_y += ClientHeight(client);
-            }
-        } else {
-            height = (monitor->window_height - ty) / (n - i);
-            resize(client, monitor->window_x + monitor_width, monitor->window_y + ty, monitor->window_width - monitor_width - (2*client->border_width), height - (2*client->border_width), 0);
-            if (ty + ClientHeight(client) < monitor->window_height) {
-                ty += ClientHeight(client);
+
+    if(num_clients == 1) {
+        // draw master window on the full screen, basically monocle
+        resize(client,
+               monitor->window_x,
+               monitor->window_y,
+               monitor->window_width,
+               monitor->window_height,
+               0);
+    } else {
+        unsigned int ty = 0;
+        unsigned int master_width = monitor->window_width * monitor->mfact;
+
+        // draw master window on left
+        resize(client,
+               monitor->window_x,
+               monitor->window_y,
+               master_width - (2*client->border_width),
+               monitor->window_height - (2*client->border_width),
+               0);
+
+        client = nexttiled(client->next);
+        master_width -= gap_size;
+
+        // draw remaining windows on right
+        unsigned int height = monitor->window_height / (num_clients - 1);
+        for (; client != NULL; client = nexttiled(client->next)) {
+            resize(client,
+                   monitor->window_x + master_width,
+                   monitor->window_y + ty,
+                   monitor->window_width - master_width - (2*client->border_width),
+                   height - (2*client->border_width),
+                   0);
+            if (ty + height < monitor->window_height) {
+                ty += height;
             }
         }
     }
@@ -1251,12 +1278,12 @@ void movemouse(const Arg *arg) {
                 ny = ocy + (ev.xmotion.y - y);
                 if (abs(selected_monitor->window_x - nx) < snap)
                     nx = selected_monitor->window_x;
-                else if (abs((selected_monitor->window_x + selected_monitor->window_width) - (nx + ClientWidth(client))) < snap)
-                    nx = selected_monitor->window_x + selected_monitor->window_width - ClientWidth(client);
+                else if (abs((selected_monitor->window_x + selected_monitor->window_width) - (nx + GappedClientWidth(client))) < snap)
+                    nx = selected_monitor->window_x + selected_monitor->window_width - GappedClientWidth(client);
                 if (abs(selected_monitor->window_y - ny) < snap)
                     ny = selected_monitor->window_y;
-                else if (abs((selected_monitor->window_y + selected_monitor->window_height) - (ny + ClientHeight(client))) < snap)
-                    ny = selected_monitor->window_y + selected_monitor->window_height - ClientHeight(client);
+                else if (abs((selected_monitor->window_y + selected_monitor->window_height) - (ny + GappedClientHeight(client))) < snap)
+                    ny = selected_monitor->window_y + selected_monitor->window_height - GappedClientHeight(client);
                 if (!client->isfloating && (abs(nx - client->x) > snap || abs(ny - client->y) > snap))
                     togglefloating(NULL);
                 if (client->isfloating)
@@ -1343,38 +1370,38 @@ void resize(Client *client, int x, int y, int width, int height, int interact) {
 
 void resizeclient(Client *client, int x, int y, int width, int height) {
     XWindowChanges wc;
- 	unsigned int n;
- 	unsigned int gapoffset;
- 	unsigned int gapincr;
- 	Client *nbc;
+    unsigned int n;
+    unsigned int gapoffset;
+    unsigned int gapincr;
+    Client *nbc;
 
     // client->oldx = client->x; client->x = wc.x = x;
     // client->oldy = client->y; client->y = wc.y = y;
     // client->old_width = client->width; client->width = wc.width = width;
     // client->old_height = client->height; client->height = wc.height = height;
     wc.border_width = client->border_width;
- 
- 	/* Get number of clients for the client's monitor */
- 	for (n = 0, nbc = nexttiled(client->monitor->clients); nbc; nbc = nexttiled(nbc->next), n++);
- 
- 	/* Do nothing if layout is floating */
- 	if (client->isfloating) {
- 		gapincr = gapoffset = 0;
- 	} else {
- 		/* Remove border and gap if layout is monocle or only one client */
- 		if (client->monitor->selected_layout == monocle_index || n == 1) {
- 			wc.border_width = 0;
- 		}
+
+    /* Get number of clients for the client's monitor */
+    for (n = 0, nbc = nexttiled(client->monitor->clients); nbc; nbc = nexttiled(nbc->next), n++);
+
+    /* Do nothing if layout is floating */
+    if (client->isfloating) {
+        gapincr = gapoffset = 0;
+    } else {
+        /* Remove border and gap if layout is monocle or only one client */
+        if (client->monitor->selected_layout == monocle_index || n == 1) {
+            wc.border_width = 0;
+        }
 
         gapincr = 2 * gap_size;
         gapoffset = gap_size;
- 	}
- 
- 	client->oldx = client->x; client->x = wc.x = x + gapoffset;
- 	client->oldy = client->y; client->y = wc.y = y + gapoffset;
- 	client->old_width  = client->width; client->width = wc.width = width - gapincr;
- 	client->old_height = client->height; client->height = wc.height = height - gapincr;
- 
+    }
+
+    client->oldx = client->x; client->x = wc.x = x + gapoffset;
+    client->oldy = client->y; client->y = wc.y = y + gapoffset;
+    client->old_width  = client->width; client->width = wc.width = width - gapincr;
+    client->old_height = client->height; client->height = wc.height = height - gapincr;
+
 
     XConfigureWindow(global_display, client->window, CWX|CWY|CWWidth|CWHeight|CWBorderWidth, &wc);
     configure(client);
@@ -1622,10 +1649,10 @@ void setup(void) {
 
     /* init screen */
     screen = DefaultScreen(global_display);
-    sw = DisplayWidth(global_display, screen);
-    sh = DisplayHeight(global_display, screen);
+    screen_width = DisplayWidth(global_display, screen);
+    screen_height = DisplayHeight(global_display, screen);
     root = RootWindow(global_display, screen);
-    drw = drw_create(global_display, screen, root, sw, sh);
+    drw = drw_create(global_display, screen, root, screen_width, screen_height);
     if (!drw_fontset_create(drw, fonts, ArrayLength(fonts)))
         die("no fonts could be loaded.");
     lrpad = drw->fonts->height;
@@ -1681,9 +1708,7 @@ void setup(void) {
 }
 
 
-void
-seturgent(Client *client, int urg)
-{
+void seturgent(Client *client, int urg) {
     XWMHints *wmh;
 
     client->isurgent = urg;
@@ -1697,6 +1722,7 @@ seturgent(Client *client, int urg)
 void showhide(Client *client) {
     if (!client)
         return;
+
     if (IsVisible(client)) {
         /* show clients top down */
         XMoveWindow(global_display, client->window, client->x, client->y);
@@ -1707,7 +1733,7 @@ void showhide(Client *client) {
     } else {
         /* hide clients bottom up */
         showhide(client->snext);
-        XMoveWindow(global_display, client->window, ClientWidth(client) * -2, client->y);
+        XMoveWindow(global_display, client->window, GappedClientWidth(client) * -2, client->y);
     }
 }
 
@@ -1798,7 +1824,6 @@ void change_gap(const Arg *arg) {
     int new_gap_size = gap_size + arg->i;
     if(new_gap_size >= 0) {
         gap_size = new_gap_size;
-        focus(NULL);
         arrange(NULL);
     }
 }
@@ -1964,10 +1989,10 @@ int updategeom(void) {
     { /* default monitor setup */
         if (!all_monitors)
             all_monitors = createmon();
-        if (all_monitors->screen_width != sw || all_monitors->screen_height != sh) {
+        if (all_monitors->screen_width != screen_width || all_monitors->screen_height != screen_height) {
             dirty = 1;
-            all_monitors->screen_width = all_monitors->window_width = sw;
-            all_monitors->screen_height = all_monitors->window_height = sh;
+            all_monitors->screen_width = all_monitors->window_width = screen_width;
+            all_monitors->screen_height = all_monitors->window_height = screen_height;
             updatebarpos(all_monitors);
         }
     }
