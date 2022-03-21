@@ -101,19 +101,18 @@ static Key keys[] = {
     { MODKEY,                       XK_l,      focusstack,     {.i = +1 } },
     { MODKEY,                       XK_j,      setmfact,       {.f = -0.05f} },
     { MODKEY,                       XK_k,      setmfact,       {.f = +0.05f} },
-    // { MODKEY,                       XK_i,      incnmaster,     {.i = +1 } },
-    // { MODKEY,                       XK_d,      incnmaster,     {.i = -1 } },
+
+    { MODKEY|ShiftMask,             XK_j,      move_vert,      {.i = +1} },
+    { MODKEY|ShiftMask,             XK_k,      move_vert,      {.i = -1} },
+
+    { MODKEY|ShiftMask,             XK_h,      move_horiz,     {.i = -1} },
+    { MODKEY|ShiftMask,             XK_l,      move_horiz,     {.i = +1} },
+
+    { MODKEY,                       XK_slash,  toggle_floating, {0} },
 
     { MODKEY,                       XK_Return, zoom,           {0} },
     { MODKEY,                       XK_Tab,    view,           {0} },
     { MODKEY,                       XK_w,      killclient,     {0} },
-
-    // { MODKEY,                       XK_t,      setlayout,      {.v = &layouts[0]} },
-    // { MODKEY,                       XK_f,      setlayout,      {.v = &layouts[1]} },
-    // { MODKEY,                       XK_m,      setlayout,      {.v = &layouts[2]} },
-
-    // { MODKEY,                       XK_space,  setlayout,      {0} },
-    // { MODKEY|ShiftMask,             XK_space,  togglefloating, {0} },
 
     { MODKEY,                       XK_comma,  focusmon,       {.i = -1 } },
     { MODKEY,                       XK_period, focusmon,       {.i = +1 } },
@@ -135,8 +134,10 @@ static Key keys[] = {
     TAGKEYS(                        XK_9,                      8)
 
     { MODKEY|ShiftMask,             XK_q,      quit,           {0} },
-    { MODKEY,                       XK_y,      change_gap,     { .i = +1 } },
-    { MODKEY|ShiftMask,             XK_y,      change_gap,     { .i = -1 } },
+    { MODKEY,                       XK_y,      resize_window,     { .i = +1 } },
+    { MODKEY|ShiftMask,             XK_y,      resize_window,     { .i = -1 } },
+    { MODKEY|ControlMask,           XK_y,      change_window_aspect_ratio,     { .i = -1 } },
+    { MODKEY|ControlMask|ShiftMask, XK_y,      change_window_aspect_ratio,     { .i = +1 } },
 
     // Volume controls
     { 0, XF86XK_AudioRaiseVolume,  spawn, { .v = volume_up   } },

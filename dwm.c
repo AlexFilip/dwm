@@ -125,7 +125,6 @@ struct Client {
     int oldstate;
     Client *next;
     Client *next_in_stack;
-    // Monitor *monitor;
     int monitor; // index into all_monitors array
     Window window;
 };
@@ -165,7 +164,6 @@ struct Monitor {
     Client *clients;
     Client *selected_client;
     Client *stack;
-    // Monitor *next;
     Window barwin;
 };
 
@@ -196,8 +194,6 @@ static int dirtomon(int dir);
 static void drawbar(int monitor_index);
 static void drawbars(void);
 static void focus(Client *client);
-static void focusmon(const Arg *arg);
-static void focusstack(const Arg *arg);
 static Atom getatomprop(Client *client, Atom prop);
 static int getrootptr(int *x, int *y);
 static long getstate(Window window);
@@ -205,41 +201,25 @@ static pid_t getstatusbarpid();
 static int gettextprop(Window window, Atom atom, char *text, unsigned int size);
 static void grabbuttons(Client *client, int focused);
 static void grabkeys(void);
-// static void incnmaster(const Arg *arg);
-static void killclient(const Arg *arg);
 static void manage(Window window, XWindowAttributes *wa);
 static void monocle(int monitor_index);
-static void movemouse(const Arg *arg);
 static Client *nexttiled(Client *client);
 static void pop(Client *);
-static void quit(const Arg *arg);
 static int  recttomon(int x, int y, int width, int height);
 static void resize(Client *client, int x, int y, int width, int height, int interact);
 static void resizeclient(Client *client, int x, int y, int width, int height);
-static void resizemouse(const Arg *arg);
 static void restack(int monitor_index);
 static int sendevent(Client *client, Atom proto);
 static void sendmon(Client *client, int monitor_index);
 static void setclientstate(Client *client, long state);
 static void setfocus(Client *client);
 static void setfullscreen(Client *client, int fullscreen);
-// static void setlayout(const Arg *arg);
-static void toggle_layout(const Arg *arg);
-static void setmfact(const Arg *arg);
 static void setup(void);
 static void seturgent(Client *client, int urg);
 static void showhide(Client *client);
 static void sigchld(int unused);
-static void sigstatusbar(const Arg *arg);
-static void spawn(const Arg *arg);
-static void tag(const Arg *arg);
-static void tagmon(const Arg *arg);
 static void tile(int monitor_index);
-// static void togglebar(const Arg *arg);
-static void togglefloating(const Arg *arg);
-static void toggletag(const Arg *arg);
-static void toggleview(const Arg *arg);
-static void change_gap(const Arg *arg);
+
 static void unfocus(Client *client, int setfocus);
 static void unmanage(Client *client, int destroyed);
 static void updatebarpos(int monitor_index);
@@ -252,14 +232,40 @@ static void updatestatus(void);
 static void updatetitle(Client *client);
 static void updatewindowtype(Client *client);
 static void updatewmhints(Client *client);
-static void view(const Arg *arg);
 static Client *wintoclient(Window window);
 static int wintomon(Window window);
 static int xerror(Display *display, XErrorEvent *ee);
 static int xerrordummy(Display *display, XErrorEvent *ee);
 static int xerrorstart(Display *display, XErrorEvent *ee);
-static void zoom(const Arg *arg);
 static int next_valid_monitor(int start_index);
+
+// Commands
+static void focusmon(const Arg *arg);
+static void focusstack(const Arg *arg);
+static void killclient(const Arg *arg);
+static void movemouse(const Arg *arg);
+static void quit(const Arg *arg);
+static void resizemouse(const Arg *arg);
+static void toggle_layout(const Arg *arg);
+static void setmfact(const Arg *arg);
+static void sigstatusbar(const Arg *arg);
+static void spawn(const Arg *arg);
+static void tag(const Arg *arg);
+static void tagmon(const Arg *arg);
+static void togglefloating(const Arg *arg);
+static void toggletag(const Arg *arg);
+static void toggleview(const Arg *arg);
+static void resize_window(const Arg *arg);
+static void move_vert(const Arg *arg);
+static void move_horiz(const Arg *arg);
+static void change_window_aspect_ratio(const Arg *arg);
+static void toggle_floating(const Arg *arg);
+static void view(const Arg *arg);
+static void zoom(const Arg *arg);
+// static void incnmaster(const Arg *arg);
+// static void setlayout(const Arg *arg);
+// static void togglebar(const Arg *arg);
+// static void rotate(const Arg *arg);
 
 // The only 3 event functions that are still necessary
 static void configurerequest(XEvent *event);
@@ -611,12 +617,16 @@ void configurerequest(XEvent *event) {
                 client->old_height = client->height;
                 client->height = ev->height;
             }
+
             if ((client->x + client->width) > monitor->screen_x + monitor->screen_width && client->isfloating)
                 client->x = monitor->screen_x + (monitor->screen_width / 2 - GappedClientWidth(client) / 2); /* center in x direction */
+
             if ((client->y + client->height) > monitor->screen_y + monitor->screen_height && client->isfloating)
                 client->y = monitor->screen_y + (monitor->screen_height / 2 - GappedClientHeight(client) / 2); /* center in y direction */
+
             if ((ev->value_mask & (CWX|CWY)) && !(ev->value_mask & (CWWidth|CWHeight)))
                 configure(client);
+
             if (IsVisible(client))
                 XMoveResizeWindow(global_display, client->window, client->x, client->y, client->width, client->height);
         } else
@@ -1413,6 +1423,7 @@ void resizemouse(const Arg *arg) {
                     if (!client->isfloating && (abs(nw - client->width) > snap || abs(nh - client->height) > snap))
                         togglefloating(NULL);
                 }
+
                 if (client->isfloating)
                     resize(client, client->x, client->y, nw, nh, 1);
                 break;
@@ -1761,7 +1772,6 @@ void toggletag(const Arg *arg) {
 
 void toggleview(const Arg *arg) {
     unsigned int newtagset = all_monitors[selected_monitor].selected_tags ^ (arg->ui & TagMask);
-
     if (newtagset) {
         all_monitors[selected_monitor].selected_tags = newtagset;
         focus(NULL);
@@ -1769,11 +1779,70 @@ void toggleview(const Arg *arg) {
     }
 }
 
-void change_gap(const Arg *arg) {
-    int new_gap_size = gap_size + arg->i;
-    if(new_gap_size >= 0) {
-        gap_size = new_gap_size;
-        arrange(-1);
+void resize_window(const Arg *arg) {
+    Client *selected_client = all_monitors[selected_monitor].selected_client;
+    int resize_amount = arg->i > 0 ? 5 : -5;
+
+    if (selected_client && selected_client->isfloating) {
+        resize(selected_client,
+               selected_client->x + resize_amount,
+               selected_client->y + resize_amount,
+               selected_client->width  - 2*resize_amount,
+               selected_client->height - 2*resize_amount,
+               0);
+    } else {
+        int new_gap_size = gap_size + resize_amount;
+        if(new_gap_size >= 0) {
+            gap_size = new_gap_size;
+            arrange(-1);
+        }
+    }
+}
+
+void move_vert(const Arg *arg) {
+    Client *selected_client = all_monitors[selected_monitor].selected_client;
+
+    int move_amount = arg->i > 0 ? 5 : -5;
+    if(selected_client && selected_client->isfloating) {
+        resize(selected_client,
+               selected_client->x,
+               selected_client->y + move_amount,
+               selected_client->width,
+               selected_client->height,
+               0);
+    }
+}
+
+void move_horiz(const Arg *arg) {
+    Client *selected_client = all_monitors[selected_monitor].selected_client;
+
+    int move_amount = arg->i > 0 ? 5 : -5;
+    if(selected_client && selected_client->isfloating) {
+        resize(selected_client, selected_client->x + move_amount, selected_client->y, selected_client->width, selected_client->height, 0);
+    }
+}
+
+void change_window_aspect_ratio(const Arg *arg) {
+    Client *selected_client = all_monitors[selected_monitor].selected_client;
+
+    int resize_amount = arg->i > 0 ? 5 : -5;
+    if(selected_client && selected_client->isfloating) {
+        resize(selected_client,
+               selected_client->x - resize_amount,
+               selected_client->y + resize_amount,
+               selected_client->width  + 2*resize_amount,
+               selected_client->height - 2*resize_amount,
+               0);
+    }
+}
+
+void toggle_floating(const Arg *arg) {
+    Client *selected_client = all_monitors[selected_monitor].selected_client;
+    if(selected_client) {
+        selected_client->isfloating = !selected_client->isfloating;
+        if(!selected_client->isfloating) {
+            arrange(selected_client->monitor);
+        }
     }
 }
 
@@ -2083,6 +2152,36 @@ void view(const Arg *arg) {
     }
 }
 
+// void rotate(const Arg *arg) {
+//     // INCOMPLETE
+//     Monitor *monitor = &all_monitors[selected_monitor];
+// 
+//     if(monitor->stack && monitor->stack->next) {
+//         Client *bottom = monitor->stack, *second_from_bottom = NULL;
+//         for(bottom = monitor->stack;
+//             bottom->next;
+//             bottom = bottom->next) {
+//             second_from_bottom = bottom;
+//         }
+// 
+//         if(arg->i > 0) {
+//             // rotate right
+//             second_from_bottom->next = NULL;
+//             bottom->next = monitor->stack;
+//             monitor->stack = bottom;
+//         } else {
+//             // rotate left
+//             Client *top = monitor->stack;
+//             monitor->stack = top->next;
+//             bottom->next = top;
+//             top->next = NULL;
+//         }
+// 
+//         focus(monitor->stack);
+//         arrange(selected_monitor);
+//     }
+// }
+
 Client *wintoclient(Window window) {
     for(int monitor_index = 0; monitor_index < monitor_capacity; ++monitor_index) {
         Monitor* monitor = &all_monitors[monitor_index];
@@ -2351,7 +2450,7 @@ int main(int argc, char *argv[]) {
                         default: break;
                         case XA_WM_TRANSIENT_FOR:
                                  if (!client->isfloating && (XGetTransientForHint(global_display, client->window, &trans)) &&
-                                     (client->isfloating = (wintoclient(trans)) != NULL))
+                                     (client->isfloating = (wintoclient(trans) != NULL)))
                                      arrange(client->monitor);
                                  break;
                         case XA_WM_NORMAL_HINTS:
