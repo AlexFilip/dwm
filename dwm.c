@@ -436,7 +436,7 @@ void arrange_monitor(int monitor_index) {
 }
 
 void arrange(int monitor_index) {
-    if (monitor_index >= 0) {
+    if (Between(monitor_index, 0, monitor_capacity - 1)) {
         arrange_monitor(monitor_index);
     } else {
         for(int monitor_index = 0; monitor_index < monitor_capacity; ++monitor_index) {
@@ -453,7 +453,15 @@ void arrangemon(int monitor_index) {
 
 int next_valid_monitor(int start_index) {
     int result = start_index;
-    for (; result < monitor_capacity; ++result) {
+    if(all_monitors[start_index].is_valid) {
+        return start_index;
+    }
+    ++result;
+    for (;result != start_index; ++result) {
+        if(result == monitor_capacity) {
+            result = 0;
+        }
+
         if(all_monitors[result].is_valid) {
             break;
         }
@@ -663,7 +671,7 @@ int createmon(void) {
             // expand array, all monitors up to end must be valid to reach this point
             int new_capacity = monitor_capacity << 1;
             Monitor *new_buffer = ecalloc(new_capacity, sizeof(Monitor));
-            for(monitor_index = 0; monitor_index < monitor_capacity; ++monitor_capacity) {
+            for(monitor_index = 0; monitor_index < monitor_capacity; ++monitor_index) {
                 new_buffer[monitor_index] = all_monitors[monitor_index];
             }
 
@@ -722,10 +730,8 @@ void detachstack(Client *client) {
 
 int dirtomon(int dir) {
     int monitor_index = selected_monitor;
+    int increment, end_point, loop_point;
 
-    int increment;
-    int end_point;
-    int loop_point;
     if(dir > 0) {
         increment = 1;
         end_point = monitor_capacity;
@@ -1942,7 +1948,7 @@ int updategeom(void) {
         int monitor_count = 0;
         for (int monitor_index = 0; monitor_index < monitor_capacity; ++monitor_index) {
             Monitor *monitor = &all_monitors[monitor_index];
-            monitor_count += monitor->is_valid;
+            monitor_count += (monitor->is_valid != 0);
         }
 
         /* only consider unique geometries as separate screens */
@@ -1981,15 +1987,17 @@ int updategeom(void) {
         } else { /* less monitors available num_screens < monitor_count */
             for (i = num_screens; i < monitor_count; i++) {
                 int monitor_index = monitor_capacity - 1;
-                for (; monitor_index >= 0 && !all_monitors[monitor_index].is_valid; --monitor_index);
+                for (; Between(monitor_index, 0, monitor_capacity - 1) && !all_monitors[monitor_index].is_valid; --monitor_index);
 
                 Monitor *monitor = &all_monitors[monitor_index];
 
                 while ((client = monitor->clients)) {
                     dirty = 1;
                     monitor->clients = client->next;
+                    monitor->is_valid = 0;
+
                     detachstack(client);
-                    client->monitor = next_valid_monitor(0);
+                    client->monitor = next_valid_monitor(client->monitor + 1);
                     attach(client);
                     attachstack(client);
                 }
@@ -2425,7 +2433,7 @@ int main(int argc, char *argv[]) {
 
                 if (ev->window == root) {
                     int monitor_index = recttomon(ev->x_root, ev->y_root, 1, 1);
-                    if (monitor_index != previous_monitor_index && previous_monitor_index >= 0) {
+                    if (monitor_index != previous_monitor_index && Between(previous_monitor_index, 0, monitor_capacity - 1)) {
                         unfocus(all_monitors[selected_monitor].selected_client, 1);
                         selected_monitor = monitor_index;
                         focus(NULL);
