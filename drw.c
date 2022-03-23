@@ -88,7 +88,6 @@ void drw_clean(Drw *drw) {
     XFreePixmap(drw->display, drw->drawable);
     XFreeGC(drw->display, drw->gc);
     drw_fontset_free(drw->fonts);
-    // free(drw);
 }
 
 /* This function is an implementation detail. Library users should use

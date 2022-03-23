@@ -23,10 +23,15 @@
 
 /* TODO:
  *  - FIX: after making the gap size 0, when you try to make it smaller, only some windows resize
+ *  - Create a free-list allocator that uses a tagged structure for buckets. The tag will help in iterating over
+ *    valid and invalid entries in the list. Hold onto the struct size in the free-list to make it "generic".
+ *    This allocator should be used for clients, monitors and anything else that needs to be allocated and freed.
+ *
  *  - Change client list from linked-list to array
  *    - Instead of holding raw pointers to clients, use indices into the array (selected_client and variables like it become integers)
  *    - Client list in monitor should be 2 lists, one for tiled, one for floating, that way nexttiled basically disappears (or becomes next_visible)
  *    - Consider how to sort clients that appear in multiple tags or when viewing multiple tags. Linked lists are the simplest way but there might be something better.
+ *
  *  - Create a secondary process that loads a dynamic library and runs it
  *    - In the dynamic library, set the value of the status bar and handle keyboard shortcuts to launch apps
  *    - If the process dies (for whatever reason), dwm can report it and revive it when a keyboard shortcut is pressed or when the library is replaced with a new version
@@ -116,11 +121,11 @@ struct Client {
     unsigned int tags;
     // struct {
         // flags
-        signed char isfixed: 1;
-        signed char isfloating: 1;
-        signed char isurgent: 1;
-        signed char isfullscreen: 1;
-        signed char neverfocus: 1;
+        unsigned char isfixed: 1;
+        unsigned char isfloating: 1;
+        unsigned char isurgent: 1;
+        unsigned char isfullscreen: 1;
+        unsigned char neverfocus: 1;
     // };
     int oldstate;
     Client *next;
@@ -179,7 +184,7 @@ struct Rule {
 
 /* function declarations */
 static void applyrules(Client *client);
-static int applysizehints(Client *client, int *x, int *y, int *width, int *height, int interact);
+static int  applysizehints(Client *client, int *x, int *y, int *width, int *height, int interact);
 static void arrange(int monitor_index);
 static void arrangemon(int monitor_index);
 static void attach(Client *client);
@@ -190,15 +195,15 @@ static void configure(Client *client);
 static int  createmon(void);
 static void detach(Client *client);
 static void detachstack(Client *client);
-static int dirtomon(int dir);
+static int  dirtomon(int dir);
 static void drawbar(int monitor_index);
 static void drawbars(void);
 static void focus(Client *client);
 static Atom getatomprop(Client *client, Atom prop);
-static int getrootptr(int *x, int *y);
+static int  getrootptr(int *x, int *y);
 static long getstate(Window window);
 static pid_t getstatusbarpid();
-static int gettextprop(Window window, Atom atom, char *text, unsigned int size);
+static int  gettextprop(Window window, Atom atom, char *text, unsigned int size);
 static void grabbuttons(Client *client, int focused);
 static void grabkeys(void);
 static void manage(Window window, XWindowAttributes *wa);
@@ -209,7 +214,7 @@ static int  recttomon(int x, int y, int width, int height);
 static void resize(Client *client, int x, int y, int width, int height, int interact);
 static void resizeclient(Client *client, int x, int y, int width, int height);
 static void restack(int monitor_index);
-static int sendevent(Client *client, Atom proto);
+static int  sendevent(Client *client, Atom proto);
 static void sendmon(Client *client, int monitor_index);
 static void setclientstate(Client *client, long state);
 static void setfocus(Client *client);
@@ -233,11 +238,11 @@ static void updatetitle(Client *client);
 static void updatewindowtype(Client *client);
 static void updatewmhints(Client *client);
 static Client *wintoclient(Window window);
-static int wintomon(Window window);
-static int xerror(Display *display, XErrorEvent *ee);
-static int xerrordummy(Display *display, XErrorEvent *ee);
-static int xerrorstart(Display *display, XErrorEvent *ee);
-static int next_valid_monitor(int start_index);
+static int  wintomon(Window window);
+static int  xerror(Display *display, XErrorEvent *ee);
+static int  xerrordummy(Display *display, XErrorEvent *ee);
+static int  xerrorstart(Display *display, XErrorEvent *ee);
+static int  next_valid_monitor(int start_index);
 
 // Commands
 static void focusmon(const Arg *arg);
@@ -277,7 +282,7 @@ static int statussig;
 static pid_t statuspid = -1;
 static int screen;
 static int screen_width, screen_height;           /* X global_display screen geometry width, height */
-static int bh, blw = 0;      /* bar geometry */
+static int bar_height, blw = 0;      /* bar geometry */
 static int lrpad;            /* sum of left and right padding for text */
 static int (*xerrorxlib)(Display *, XErrorEvent *);
 static unsigned int numlockmask = 0;
@@ -316,7 +321,7 @@ static Window root, wmcheckwin;
 /* configuration, allows nested code to access above variables */
 #include "config.h"
 
-static XftColor *scheme_color_buffer;
+static XftColor *scheme_color_buffer; // the 
 static XftColor *scheme[ArrayLength(colors)];
 
 /* compile-time check if all tags fit into an unsigned int bit array. */
@@ -385,10 +390,10 @@ int applysizehints(Client *client, int *x, int *y, int *width, int *height, int 
             *y = monitor->window_y;
     }
 
-    if (*height < bh)
-        *height = bh;
-    if (*width < bh)
-        *width = bh;
+    if (*height < bar_height)
+        *height = bar_height;
+    if (*width < bar_height)
+        *width = bar_height;
 
     if (resizehints || client->isfloating) {
         /* see last two sentences in ICCCM 4.1.2.3 */
@@ -775,23 +780,22 @@ void drawbar(int monitor_index) {
 
     /* draw status first so it can be overdrawn by tags later */
     if (monitor_index == selected_monitor) { /* status is only drawn on selected monitor */
-        char *text, *s, ch;
+        char *text, ch;
         drw.scheme = scheme[SchemeNorm];
 
         x = 0;
-        for (text = s = stext; *s; s++) {
-            if ((unsigned char)(*s) < ' ') {
-                ch = *s;
-                *s = '\0';
+        for (text = stext; *text; text++) {
+            if ((unsigned char)(*text) < ' ') {
+                ch = *text;
+                *text = '\0';
                 text_width = TextWidth(text) - lrpad;
-                drw_text(&drw, monitor->window_width - statusw + x, 0, text_width, bh, 0, text, 0);
+                drw_text(&drw, monitor->window_width - statusw + x, 0, text_width, bar_height, 0, text, 0);
                 x += text_width;
-                *s = ch;
-                text = s + 1;
+                *text = ch;
             }
         }
         text_width = TextWidth(text) - lrpad + 2;
-        drw_text(&drw, monitor->window_width - statusw + x, 0, text_width, bh, 0, text, 0);
+        drw_text(&drw, monitor->window_width - statusw + x, 0, text_width, bar_height, 0, text, 0);
         text_width = statusw;
     }
 
@@ -807,24 +811,24 @@ void drawbar(int monitor_index) {
         if (occupied & (1 << i) || monitor_is_selected) {
             width = TextWidth(tags[i]);
             drw.scheme = scheme[monitor_is_selected ? SchemeSel : SchemeNorm];
-            drw_text(&drw, x, 0, width, bh, lrpad / 2, tags[i], urg & 1 << i);
+            drw_text(&drw, x, 0, width, bar_height, lrpad / 2, tags[i], urg & 1 << i);
 
             x += width;
         }
     }
 
-    if ((width = monitor->window_width - text_width - x) > bh) {
+    if ((width = monitor->window_width - text_width - x) > bar_height) {
         if (monitor->selected_client) {
             drw.scheme = scheme[SchemeNorm];
-            drw_text(&drw, x, 0, width, bh, lrpad / 2, monitor->selected_client->name, 0);
+            drw_text(&drw, x, 0, width, bar_height, lrpad / 2, monitor->selected_client->name, 0);
             if (monitor->selected_client->isfloating)
                 drw_rect(&drw, x + boxs, boxs, boxw, boxw, monitor->selected_client->isfixed, 0);
         } else {
             drw.scheme = scheme[SchemeNorm];
-            drw_rect(&drw, x, 0, width, bh, 1, 1);
+            drw_rect(&drw, x, 0, width, bar_height, 1, 1);
         }
     }
-    drw_map(&drw, monitor->barwin, 0, 0, monitor->window_width, bh);
+    drw_map(&drw, monitor->barwin, 0, 0, monitor->window_width, bar_height);
 }
 
 void drawbars(void) {
@@ -1106,7 +1110,7 @@ void manage(Window window, XWindowAttributes *wa) {
     client->x = Maximum(client->x, monitor->screen_x);
     /* only fix client y-offset, if the client center might cover the bar */
     client->y = Maximum(client->y, ((monitor->bar_height == monitor->screen_y) && (client->x + (client->width / 2) >= monitor->window_x)
-                                && (client->x + (client->width / 2) < monitor->window_x + monitor->window_width)) ? bh : monitor->screen_y);
+                                && (client->x + (client->width / 2) < monitor->window_x + monitor->window_width)) ? bar_height : monitor->screen_y);
     client->border_width = borderpx;
 
     wc.border_width = client->border_width;
@@ -1620,7 +1624,7 @@ void setup(void) {
     if (!drw_fontset_create(&drw, fonts, ArrayLength(fonts)))
         die("no fonts could be loaded.");
     lrpad = drw.fonts->height;
-    bh = drw.fonts->height + 2;
+    bar_height = drw.fonts->height + 2;
     updategeom();
     /* init atoms */
     utf8string = XInternAtom(global_display, "UTF8_STRING", False);
@@ -1909,7 +1913,7 @@ void updatebars(void) {
         if(monitor->is_valid) {
             if (monitor->barwin)
                 continue;
-            monitor->barwin = XCreateWindow(global_display, root, monitor->window_x, monitor->bar_height, monitor->window_width, bh, 0, DefaultDepth(global_display, screen),
+            monitor->barwin = XCreateWindow(global_display, root, monitor->window_x, monitor->bar_height, monitor->window_width, bar_height, 0, DefaultDepth(global_display, screen),
                                             CopyFromParent, DefaultVisual(global_display, screen),
                                             CWOverrideRedirect|CWBackPixmap|CWEventMask, &wa);
             XDefineCursor(global_display, monitor->barwin, cursor[CurNormal].cursor);
@@ -1925,11 +1929,11 @@ void updatebarpos(int monitor_index) {
     monitor->window_y = monitor->screen_y;
     monitor->window_height = monitor->screen_height;
     if (monitor->showbar) {
-        monitor->window_height -= bh;
+        monitor->window_height -= bar_height;
         monitor->bar_height = monitor->topbar ? monitor->window_y : monitor->window_y + monitor->window_height;
-        monitor->window_y = monitor->topbar ? monitor->window_y + bh : monitor->window_y;
+        monitor->window_y = monitor->topbar ? monitor->window_y + bar_height : monitor->window_y;
     } else
-        monitor->bar_height = -bh;
+        monitor->bar_height = -bar_height;
 }
 
 void updateclientlist() {
@@ -2346,7 +2350,7 @@ int main(int argc, char *argv[]) {
                     screen_height = ev->height;
 
                     if (updategeom() || dirty) {
-                        drw_resize(&drw, screen_width, bh);
+                        drw_resize(&drw, screen_width, bar_height);
                         updatebars();
                         for (int monitor_index = 0; monitor_index < monitor_capacity; ++monitor_index) {
                             Monitor *monitor = &all_monitors[monitor_index];
@@ -2356,7 +2360,7 @@ int main(int argc, char *argv[]) {
                                         resizeclient(client, monitor->screen_x, monitor->screen_y, monitor->screen_width, monitor->screen_height);
                                     }
                                 }
-                                XMoveResizeWindow(global_display, monitor->barwin, monitor->window_x, monitor->bar_height, monitor->window_width, bh);
+                                XMoveResizeWindow(global_display, monitor->barwin, monitor->window_x, monitor->bar_height, monitor->window_width, bar_height);
                             }
                         }
                         focus(NULL);
