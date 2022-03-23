@@ -69,7 +69,7 @@
 #define GappedClientWidth(Client)  ((Client)->width + 2 * (Client)->border_width + gap_size)
 #define GappedClientHeight(Client) ((Client)->height + 2 * (Client)->border_width + gap_size)
 #define TagMask                    ((1 << ArrayLength(tags)) - 1)
-#define TextWidth(X)               (drw_fontset_getwidth(drw, (X)) + lrpad)
+#define TextWidth(X)               (drw_fontset_getwidth(&drw, (X)) + lrpad)
 
 /* enums */
 enum { CurNormal, CurResize, CurMove, CurLast }; /* cursor */
@@ -261,9 +261,7 @@ static void move_horiz(const Arg *arg);
 static void change_window_aspect_ratio(const Arg *arg);
 static void view(const Arg *arg);
 static void zoom(const Arg *arg);
-// static void incnmaster(const Arg *arg);
 // static void setlayout(const Arg *arg);
-// static void togglebar(const Arg *arg);
 // static void rotate(const Arg *arg);
 
 // The only 3 event functions that are still necessary
@@ -304,10 +302,9 @@ static unsigned int numlockmask = 0;
 
 static Atom wmatom[WMLast], netatom[NetLast];
 static int global_running = 1;
-static Cur *cursor[CurLast];
-static Clr **scheme;
+static Cur cursor[CurLast];
 static Display *global_display;
-static Drw *drw;
+static Drw drw;
 static int monitor_capacity; // capacity of all_monitors array
 static Monitor *all_monitors; // , *selected_monitor;
 static int selected_monitor;
@@ -318,6 +315,9 @@ static Window root, wmcheckwin;
 
 /* configuration, allows nested code to access above variables */
 #include "config.h"
+
+static XftColor *scheme_color_buffer;
+static XftColor *scheme[ArrayLength(colors)];
 
 /* compile-time check if all tags fit into an unsigned int bit array. */
 struct NumTags { char limitexceeded[ArrayLength(tags) > 31 ? -1 : 1]; };
@@ -763,37 +763,36 @@ int dirtomon(int dir) {
 }
 
 void drawbar(int monitor_index) {
-    int x, width, tw = 0;
-    int boxs = drw->fonts->height / 9;
-    int boxw = drw->fonts->height / 6 + 2;
+    int x, width, text_width = 0;
+    int boxs = drw.fonts->height / 9;
+    int boxw = drw.fonts->height / 6 + 2;
     unsigned int i, occupied = 0, urg = 0;
     Client *client;
 
     Monitor *monitor = &all_monitors[monitor_index];
-
     if (!monitor->showbar)
         return;
 
     /* draw status first so it can be overdrawn by tags later */
     if (monitor_index == selected_monitor) { /* status is only drawn on selected monitor */
         char *text, *s, ch;
-        drw_setscheme(drw, scheme[SchemeNorm]);
+        drw.scheme = scheme[SchemeNorm];
 
         x = 0;
         for (text = s = stext; *s; s++) {
             if ((unsigned char)(*s) < ' ') {
                 ch = *s;
                 *s = '\0';
-                tw = TextWidth(text) - lrpad;
-                drw_text(drw, monitor->window_width - statusw + x, 0, tw, bh, 0, text, 0);
-                x += tw;
+                text_width = TextWidth(text) - lrpad;
+                drw_text(&drw, monitor->window_width - statusw + x, 0, text_width, bh, 0, text, 0);
+                x += text_width;
                 *s = ch;
                 text = s + 1;
             }
         }
-        tw = TextWidth(text) - lrpad + 2;
-        drw_text(drw, monitor->window_width - statusw + x, 0, tw, bh, 0, text, 0);
-        tw = statusw;
+        text_width = TextWidth(text) - lrpad + 2;
+        drw_text(&drw, monitor->window_width - statusw + x, 0, text_width, bh, 0, text, 0);
+        text_width = statusw;
     }
 
     for (client = monitor->clients; client; client = client->next) {
@@ -807,26 +806,25 @@ void drawbar(int monitor_index) {
         int monitor_is_selected = monitor->selected_tags & (1 << i);
         if (occupied & (1 << i) || monitor_is_selected) {
             width = TextWidth(tags[i]);
-            drw_setscheme(drw, scheme[monitor_is_selected ? SchemeSel : SchemeNorm]);
-            drw_text(drw, x, 0, width, bh, lrpad / 2, tags[i], urg & 1 << i);
+            drw.scheme = scheme[monitor_is_selected ? SchemeSel : SchemeNorm];
+            drw_text(&drw, x, 0, width, bh, lrpad / 2, tags[i], urg & 1 << i);
 
             x += width;
         }
     }
 
-    if ((width = monitor->window_width - tw - x) > bh) {
+    if ((width = monitor->window_width - text_width - x) > bh) {
         if (monitor->selected_client) {
-            // drw_setscheme(drw, scheme[monitor == selected_monitor ? SchemeSel : SchemeNorm]);
-            drw_setscheme(drw, scheme[SchemeNorm]);
-            drw_text(drw, x, 0, width, bh, lrpad / 2, monitor->selected_client->name, 0);
+            drw.scheme = scheme[SchemeNorm];
+            drw_text(&drw, x, 0, width, bh, lrpad / 2, monitor->selected_client->name, 0);
             if (monitor->selected_client->isfloating)
-                drw_rect(drw, x + boxs, boxs, boxw, boxw, monitor->selected_client->isfixed, 0);
+                drw_rect(&drw, x + boxs, boxs, boxw, boxw, monitor->selected_client->isfixed, 0);
         } else {
-            drw_setscheme(drw, scheme[SchemeNorm]);
-            drw_rect(drw, x, 0, width, bh, 1, 1);
+            drw.scheme = scheme[SchemeNorm];
+            drw_rect(&drw, x, 0, width, bh, 1, 1);
         }
     }
-    drw_map(drw, monitor->barwin, 0, 0, monitor->window_width, bh);
+    drw_map(&drw, monitor->barwin, 0, 0, monitor->window_width, bh);
 }
 
 void drawbars(void) {
@@ -1234,26 +1232,28 @@ void tile(int monitor_index) {
 // --
 
 void movemouse(const Arg *arg) {
-    int x, y, ocx, ocy, nx, ny;
     Client *client;
     XEvent ev;
     Time lasttime = 0;
 
     if (!(client = all_monitors[selected_monitor].selected_client))
         return;
+
     if (client->isfullscreen) /* no support moving fullscreen windows by mouse */
         return;
+
     restack(selected_monitor);
-    ocx = client->x;
-    ocy = client->y;
+    int ocx = client->x;
+    int ocy = client->y;
     if (XGrabPointer(global_display, root, False, MouseMask, GrabModeAsync, GrabModeAsync,
-                     None, cursor[CurMove]->cursor, CurrentTime) != GrabSuccess)
+                     None, cursor[CurMove].cursor, CurrentTime) != GrabSuccess)
         return;
+
+    int x, y;
     if (!getrootptr(&x, &y))
         return;
 
-
-    Monitor *selected_monitor_ptr = &all_monitors[selected_monitor];
+    Monitor *monitor = &all_monitors[selected_monitor];
     do {
         XMaskEvent(global_display, MouseMask|ExposureMask|SubstructureRedirectMask, &ev);
         switch(ev.type) {
@@ -1272,22 +1272,27 @@ void movemouse(const Arg *arg) {
             case MotionNotify:
                 if ((ev.xmotion.time - lasttime) <= (1000 / 60))
                     continue;
-                lasttime = ev.xmotion.time;
 
-                nx = ocx + (ev.xmotion.x - x);
-                ny = ocy + (ev.xmotion.y - y);
-                if (abs(selected_monitor_ptr->window_x - nx) < snap)
-                    nx = selected_monitor_ptr->window_x;
-                else if (abs((selected_monitor_ptr->window_x + selected_monitor_ptr->window_width) - (nx + GappedClientWidth(client))) < snap)
-                    nx = selected_monitor_ptr->window_x + selected_monitor_ptr->window_width - GappedClientWidth(client);
-                if (abs(selected_monitor_ptr->window_y - ny) < snap)
-                    ny = selected_monitor_ptr->window_y;
-                else if (abs((selected_monitor_ptr->window_y + selected_monitor_ptr->window_height) - (ny + GappedClientHeight(client))) < snap)
-                    ny = selected_monitor_ptr->window_y + selected_monitor_ptr->window_height - GappedClientHeight(client);
+                lasttime = ev.xmotion.time;
+                int nx = ocx + (ev.xmotion.x - x);
+                int ny = ocy + (ev.xmotion.y - y);
+
+                if (abs(monitor->window_x - nx) < snap)
+                    nx = monitor->window_x;
+                else if (abs((monitor->window_x + monitor->window_width) - (nx + GappedClientWidth(client))) < snap)
+                    nx = monitor->window_x + monitor->window_width - GappedClientWidth(client);
+
+                if (abs(monitor->window_y - ny) < snap)
+                    ny = monitor->window_y;
+                else if (abs((monitor->window_y + monitor->window_height) - (ny + GappedClientHeight(client))) < snap)
+                    ny = monitor->window_y + monitor->window_height - GappedClientHeight(client);
+
                 if (!client->isfloating && (abs(nx - client->x) > snap || abs(ny - client->y) > snap))
                     togglefloating(NULL);
+
                 if (client->isfloating)
                     resize(client, nx, ny, client->width, client->height, 1);
+
                 break;
         }
     } while (ev.type != ButtonRelease);
@@ -1388,18 +1393,21 @@ void resizemouse(const Arg *arg) {
 
     if (!(client = all_monitors[selected_monitor].selected_client))
         return;
+
     if (client->isfullscreen) /* no support resizing fullscreen windows by mouse */
         return;
+
     restack(selected_monitor);
     ocx = client->x;
     ocy = client->y;
     if (XGrabPointer(global_display, root, False, MouseMask, GrabModeAsync, GrabModeAsync,
-                     None, cursor[CurResize]->cursor, CurrentTime) != GrabSuccess)
+                     None, cursor[CurResize].cursor, CurrentTime) != GrabSuccess)
         return;
+
     XWarpPointer(global_display, None, client->window, 0, 0, 0, 0, client->width + client->border_width - 1, client->height + client->border_width - 1);
 
-    Monitor *client_monitor_ptr = &all_monitors[client->monitor];
-    Monitor *selected_monitor_ptr = &all_monitors[selected_monitor];
+    Monitor *client_monitor = &all_monitors[client->monitor];
+    Monitor *monitor = &all_monitors[selected_monitor];
     do {
         XMaskEvent(global_display, MouseMask|ExposureMask|SubstructureRedirectMask, &ev);
         switch(ev.type) {
@@ -1422,8 +1430,8 @@ void resizemouse(const Arg *arg) {
 
                 nw = Maximum(ev.xmotion.x - ocx - 2 * client->border_width + 1, 1);
                 nh = Maximum(ev.xmotion.y - ocy - 2 * client->border_width + 1, 1);
-                if (client_monitor_ptr->window_x + nw >= selected_monitor_ptr->window_x && client_monitor_ptr->window_x + nw <= selected_monitor_ptr->window_x + selected_monitor_ptr->window_width
-                    && client_monitor_ptr->window_y + nh >= selected_monitor_ptr->window_y && client_monitor_ptr->window_y + nh <= selected_monitor_ptr->window_y + selected_monitor_ptr->window_height)
+                if (client_monitor->window_x + nw >= monitor->window_x && client_monitor->window_x + nw <= monitor->window_x + monitor->window_width
+                    && client_monitor->window_y + nh >= monitor->window_y && client_monitor->window_y + nh <= monitor->window_y + monitor->window_height)
                 {
                     if (!client->isfloating && (abs(nw - client->width) > snap || abs(nh - client->height) > snap))
                         togglefloating(NULL);
@@ -1454,16 +1462,17 @@ void restack(int monitor_index) {
     XWindowChanges wc;
 
     drawbar(monitor_index);
-    if (!all_monitors[monitor_index].selected_client)
+    Monitor *monitor = &all_monitors[monitor_index];
+    if (!monitor->selected_client)
         return;
 
-    if (all_monitors[monitor_index].selected_client->isfloating) {
-        XRaiseWindow(global_display, all_monitors[monitor_index].selected_client->window);
+    if (monitor->selected_client->isfloating) {
+        XRaiseWindow(global_display, monitor->selected_client->window);
     }
 
     wc.stack_mode = Below;
-    wc.sibling = all_monitors[monitor_index].barwin;
-    for (client = all_monitors[monitor_index].stack; client; client = client->next_in_stack) {
+    wc.sibling = monitor->barwin;
+    for (client = monitor->stack; client; client = client->next_in_stack) {
         if (!client->isfloating && IsVisible(client)) {
             XConfigureWindow(global_display, client->window, CWSibling|CWStackMode, &wc);
             wc.sibling = client->window;
@@ -1538,8 +1547,8 @@ void setfullscreen(Client *client, int fullscreen) {
         client->border_width = 0;
         client->isfloating = 1;
 
-        Monitor* client_monitor_ptr = &all_monitors[client->monitor];
-        resizeclient(client, client_monitor_ptr->screen_x, client_monitor_ptr->screen_y, client_monitor_ptr->screen_width, client_monitor_ptr->screen_height);
+        Monitor* client_monitor = &all_monitors[client->monitor];
+        resizeclient(client, client_monitor->screen_x, client_monitor->screen_y, client_monitor->screen_width, client_monitor->screen_height);
         XRaiseWindow(global_display, client->window);
     } else if (!fullscreen && client->isfullscreen){
         XChangeProperty(global_display, client->window, netatom[NetWMState], XA_ATOM, 32,
@@ -1607,11 +1616,11 @@ void setup(void) {
     screen_width = DisplayWidth(global_display, screen);
     screen_height = DisplayHeight(global_display, screen);
     root = RootWindow(global_display, screen);
-    drw = drw_create(global_display, screen, root, screen_width, screen_height);
-    if (!drw_fontset_create(drw, fonts, ArrayLength(fonts)))
+    drw_init(&drw, global_display, screen, root, screen_width, screen_height);
+    if (!drw_fontset_create(&drw, fonts, ArrayLength(fonts)))
         die("no fonts could be loaded.");
-    lrpad = drw->fonts->height;
-    bh = drw->fonts->height + 2;
+    lrpad = drw.fonts->height;
+    bh = drw.fonts->height + 2;
     updategeom();
     /* init atoms */
     utf8string = XInternAtom(global_display, "UTF8_STRING", False);
@@ -1629,13 +1638,21 @@ void setup(void) {
     netatom[NetWMWindowTypeDialog] = XInternAtom(global_display, "_NET_WM_WINDOW_TYPE_DIALOG", False);
     netatom[NetClientList] = XInternAtom(global_display, "_NET_CLIENT_LIST", False);
     /* init cursors */
-    cursor[CurNormal] = drw_cur_create(drw, XC_left_ptr);
-    cursor[CurResize] = drw_cur_create(drw, XC_sizing);
-    cursor[CurMove] = drw_cur_create(drw, XC_fleur);
+    cursor[CurNormal] = drw_cur_create(&drw, XC_left_ptr);
+    cursor[CurResize] = drw_cur_create(&drw, XC_sizing);
+    cursor[CurMove] = drw_cur_create(&drw, XC_fleur);
     /* init appearance */
-    scheme = ecalloc(ArrayLength(colors), sizeof(Clr *));
+
+    // TODO: the hard-coded 3 is for foreground, background and border from ColorSet. Find a better way to do this. Find a better way to do this
+    scheme_color_buffer = ecalloc(3 * ArrayLength(colors), sizeof(XftColor));
+    for (i = 0; i < ArrayLength(colors); i++) {
+        XftColor *xft_color = &scheme_color_buffer[i * 3];
+        drw_scm_create(&drw, &colors[i], xft_color);
+        scheme[i] = xft_color;
+    }
+    
     for (i = 0; i < ArrayLength(colors); i++)
-        scheme[i] = drw_scm_create(drw, colors[i], 3);
+
     /* init bars */
     updatebars();
     updatestatus();
@@ -1652,7 +1669,7 @@ void setup(void) {
                     PropModeReplace, (unsigned char *) netatom, NetLast);
     XDeleteProperty(global_display, root, netatom[NetClientList]);
     /* select events */
-    wa.cursor = cursor[CurNormal]->cursor;
+    wa.cursor = cursor[CurNormal].cursor;
     wa.event_mask = SubstructureRedirectMask|SubstructureNotifyMask
       |ButtonPressMask|PointerMotionMask|EnterWindowMask
       |LeaveWindowMask|StructureNotifyMask|PropertyChangeMask;
@@ -1895,7 +1912,7 @@ void updatebars(void) {
             monitor->barwin = XCreateWindow(global_display, root, monitor->window_x, monitor->bar_height, monitor->window_width, bh, 0, DefaultDepth(global_display, screen),
                                             CopyFromParent, DefaultVisual(global_display, screen),
                                             CWOverrideRedirect|CWBackPixmap|CWEventMask, &wa);
-            XDefineCursor(global_display, monitor->barwin, cursor[CurNormal]->cursor);
+            XDefineCursor(global_display, monitor->barwin, cursor[CurNormal].cursor);
             XMapRaised(global_display, monitor->barwin);
             XSetClassHint(global_display, monitor->barwin, &ch);
         }
@@ -2329,7 +2346,7 @@ int main(int argc, char *argv[]) {
                     screen_height = ev->height;
 
                     if (updategeom() || dirty) {
-                        drw_resize(drw, screen_width, bh);
+                        drw_resize(&drw, screen_width, bh);
                         updatebars();
                         for (int monitor_index = 0; monitor_index < monitor_capacity; ++monitor_index) {
                             Monitor *monitor = &all_monitors[monitor_index];
@@ -2513,12 +2530,12 @@ int main(int argc, char *argv[]) {
     }
 
     for (size_t i = 0; i < CurLast; i++)
-        drw_cur_free(drw, cursor[i]);
-    for (size_t i = 0; i < ArrayLength(colors); i++)
-        free(scheme[i]);
+        XFreeCursor(drw.display, cursor[i].cursor);
+
+    free(scheme_color_buffer);
 
     XDestroyWindow(global_display, wmcheckwin);
-    drw_free(drw);
+    drw_clean(&drw);
     XSync(global_display, False);
     XSetInputFocus(global_display, PointerRoot, RevertToPointerRoot, CurrentTime);
     XDeleteProperty(global_display, root, netatom[NetActiveWindow]);

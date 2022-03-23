@@ -16,11 +16,10 @@ static const char col_selected[]    = "#fa2106";
 
 static int gap_size                 = 6;        /* gaps between windows */
 
-static const char *colors[][3]      = {
+static const ColorSet colors[]      = {
     /*               fg             bg         border   */
-    [SchemeNorm] = { col_gray3,     col_gray1, col_gray2 },
-    [SchemeSel]  = { col_selected,  col_gray1, col_cyan  },
-
+    [SchemeNorm] = { .fg = col_gray3,     .bg = col_gray1, .border = col_gray2 },
+    [SchemeSel]  = { .fg = col_selected,  .bg = col_gray1, .border = col_cyan  },
 };
 
 /* tagging */
