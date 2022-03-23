@@ -23,10 +23,10 @@
 
 /* TODO:
  *  - FIX: after making the gap size 0, when you try to make it smaller, only some windows resize
- *  - Change monitor and client list from linked-list to array
- *    - Instead of holding raw pointers to monitors and clients, use indices into the array (selected_monitor and variables like it become integers)
+ *  - Change client list from linked-list to array
+ *    - Instead of holding raw pointers to clients, use indices into the array (selected_client and variables like it become integers)
  *    - Client list in monitor should be 2 lists, one for tiled, one for floating, that way nexttiled basically disappears (or becomes next_visible)
- *    - Think about how stacks are handled in this scenario
+ *    - Consider how to sort clients that appear in multiple tags or when viewing multiple tags. Linked lists are the simplest way but there might be something better.
  *  - Create a secondary process that loads a dynamic library and runs it
  *    - In the dynamic library, set the value of the status bar and handle keyboard shortcuts to launch apps
  *    - If the process dies (for whatever reason), dwm can report it and revive it when a keyboard shortcut is pressed or when the library is replaced with a new version

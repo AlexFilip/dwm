@@ -69,7 +69,8 @@ static const Layout layouts[] = {
 /* helper for spawning shell commands in the pre dwm-5.0 fashion */
 #define SHCMD(cmd) { .v = (const char*[]){ "/bin/sh", "-c", cmd, NULL } }
 
-#define STATUSBAR "dwmblocks"
+// #define STATUSBAR "dwmblocks"
+#define STATUSBAR "spoon"
 
 static const char* volume_up[]   = { "/usr/bin/pactl", "set-sink-volume", "@DEFAULT_SINK@",   "+5%",    NULL };
 static const char* volume_down[] = { "/usr/bin/pactl", "set-sink-volume", "@DEFAULT_SINK@",   "-5%",    NULL };
