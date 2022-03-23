@@ -259,7 +259,6 @@ static void resize_window(const Arg *arg);
 static void move_vert(const Arg *arg);
 static void move_horiz(const Arg *arg);
 static void change_window_aspect_ratio(const Arg *arg);
-static void toggle_floating(const Arg *arg);
 static void view(const Arg *arg);
 static void zoom(const Arg *arg);
 // static void incnmaster(const Arg *arg);
@@ -1747,19 +1746,23 @@ void tagmon(const Arg *arg) {
 }
 
 void togglefloating(const Arg *arg) {
-    Client *selected_client = all_monitors[selected_monitor].selected_client;
+    Monitor *monitor = &all_monitors[selected_monitor];
+    Client *selected_client = monitor->selected_client;
 
-    if (!selected_client || selected_client->isfullscreen)
+    if (selected_client && !selected_client->isfullscreen) {
         /* no support for fullscreen windows */
-        return;
 
-    selected_client->isfloating = !selected_client->isfloating || selected_client->isfixed;
-    if (selected_client->isfloating) {
-        resize(selected_client, selected_client->x, selected_client->y,
-               selected_client->width, selected_client->height, 0);
+        selected_client->isfloating = !selected_client->isfloating || selected_client->isfixed;
+        if (selected_client->isfloating) {
+            int centered_x = monitor->window_width/2 - selected_client->width/2;
+            int centered_y = monitor->window_height/2 - selected_client->height/2;
+
+            resize(selected_client, centered_x, centered_y,
+                   selected_client->width, selected_client->height, 0);
+        }
+
+        arrange(selected_monitor);
     }
-
-    arrange(selected_monitor);
 }
 
 void toggletag(const Arg *arg) {
@@ -1839,16 +1842,6 @@ void change_window_aspect_ratio(const Arg *arg) {
                selected_client->width  + 2*resize_amount,
                selected_client->height - 2*resize_amount,
                0);
-    }
-}
-
-void toggle_floating(const Arg *arg) {
-    Client *selected_client = all_monitors[selected_monitor].selected_client;
-    if(selected_client) {
-        selected_client->isfloating = !selected_client->isfloating;
-        if(!selected_client->isfloating) {
-            arrange(selected_client->monitor);
-        }
     }
 }
 
