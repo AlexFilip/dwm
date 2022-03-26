@@ -22,7 +22,6 @@
  */
 
 /* TODO:
- *  - FIX: after making the gap size 0, when you try to make it smaller, only some windows resize
  *  - Create a free-list allocator that uses a tagged structure for buckets. The tag will help in iterating over
  *    valid and invalid entries in the list. Hold onto the struct size in the free-list to make it "generic".
  *    This allocator should be used for clients, monitors and anything else that needs to be allocated and freed.
@@ -82,7 +81,6 @@
 
 /* enums */
 enum { CurNormal, CurResize, CurMove, CurLast }; /* cursor */
-// TODO: Add color for modes
 enum { SchemeNorm, SchemeSel, SchemeAppLaunch }; /* color schemes */
 enum { NetSupported, NetWMName, NetWMState, NetWMCheck,
        NetWMFullscreen, NetActiveWindow, NetWMWindowType,
@@ -302,7 +300,7 @@ static void maprequest(XEvent *event);
 /* variables */
 static const char broken[] = "broken";
 static char status_text[256];
-static int statusw;
+static int status_width;
 static int statussig;
 static pid_t statuspid = -1;
 static int screen;
@@ -554,8 +552,8 @@ void buttonpress(XEvent *event) {
         if (i < ArrayLength(tags)) {
             click = ClkTagBar;
             arg.ui = 1 << i;
-        } else if (ev->x > all_monitors[selected_monitor].window_width - statusw) {
-            x = all_monitors[selected_monitor].window_width - statusw;
+        } else if (ev->x > all_monitors[selected_monitor].window_width - status_width) {
+            x = all_monitors[selected_monitor].window_width - status_width;
             click = ClkStatusText;
             statussig = 0;
             for (text = status_text; *text && x <= ev->x; text++) {
@@ -773,7 +771,7 @@ int dirtomon(int dir) {
 }
 
 void drawbar(int monitor_index) {
-    static const int bar_gap = 0;
+    // static const int bar_gap = 0;
     int x, text_width = 0;
     int bar_height = global_bar_height + 30;
     int text_height = global_bar_height;
@@ -782,28 +780,28 @@ void drawbar(int monitor_index) {
     if (!monitor->showbar)
         return;
 
-    int window_width = monitor->window_width - bar_gap * 2;
+    int window_width = monitor->window_width;
 
-    drw_rect(&drw, bar_gap, bar_gap, window_width, bar_height, scheme[SchemeNorm], 1, 1);
+    drw_rect(&drw, 0, 0, window_width, bar_height, scheme[SchemeNorm], 1, 1);
 
     /* draw status first so it can be overdrawn by tags later */
     if (monitor_index == selected_monitor) {
         /* status is only drawn on selected monitor */
         char *text;
-        x = bar_gap;
+        x = 0;
         for (text = status_text; *text; text++) {
             if ((unsigned char)(*text) < ' ') {
                 char prev_char = *text;
                 *text = '\0';
                 text_width = TextWidth(text) - lrpad;
-                drw_text(&drw, window_width - statusw + x, bar_gap, text_width, text_height, scheme[SchemeNorm], 0, text, 0);
+                drw_text(&drw, window_width - status_width + x, 0, text_width, text_height, scheme[SchemeNorm], 0, text, 0);
                 x += text_width;
                 *text = prev_char;
             }
         }
-        text_width = TextWidth(text) - lrpad + 2;
-        drw_text(&drw, window_width - statusw + x, bar_gap, text_width, text_height, scheme[SchemeNorm], 0, text, 0);
-        text_width = statusw;
+        text_width = TextWidth(status_text) - lrpad + 2;
+        drw_text(&drw, window_width - status_width + x, 0, text_width, text_height, scheme[SchemeNorm], 0, status_text, 0);
+        text_width = status_width;
     }
 
     // Create occupancy mask
@@ -815,12 +813,12 @@ void drawbar(int monitor_index) {
     }
 
     // Draw tags
-    x = bar_gap;
+    x = 0;
     for (unsigned int i = 0; i < ArrayLength(tags); i++) {
         int tag_is_selected = monitor->selected_tags & (1 << i);
         if (occupied & (1 << i) || tag_is_selected) {
             int text_width = TextWidth(tags[i]);
-            drw_text(&drw, x, bar_gap, text_width, text_height, scheme[tag_is_selected ? SchemeSel : SchemeNorm], lrpad / 2, tags[i], urg & (1 << i));
+            drw_text(&drw, x, 0, text_width, text_height, scheme[tag_is_selected ? SchemeSel : SchemeNorm], lrpad / 2, tags[i], urg & (1 << i));
 
             x += text_width;
         }
@@ -834,12 +832,12 @@ void drawbar(int monitor_index) {
         // Maybe this should be (current_mode != ModeNormal)
         if (mode_info[current_mode].name) {
             int text_width = TextWidth(mode_info[current_mode].name);
-            drw_text(&drw, x, bar_gap, width, text_height, scheme[SchemeAppLaunch], lrpad / 2, mode_info[current_mode].name, 0);
+            drw_text(&drw, x, 0, width, text_height, scheme[SchemeAppLaunch], lrpad / 2, mode_info[current_mode].name, 0);
             x += text_width;
 
-            drw_rect(&drw, x, bar_gap, width, bar_height, scheme[SchemeNorm], 1, 1);
+            drw_rect(&drw, x, 0, width, bar_height, scheme[SchemeNorm], 1, 1);
         } else if (monitor->selected_client) {
-            drw_text(&drw, x, bar_gap, width, text_height, scheme[SchemeNorm], lrpad / 2, monitor->selected_client->name, 0);
+            drw_text(&drw, x, 0, width, text_height, scheme[SchemeNorm], lrpad / 2, monitor->selected_client->name, 0);
             if (monitor->selected_client->isfloating) {
                 // Box to indicate floating window
                 int boxw = drw.fonts->height / 6 + 2;
@@ -847,11 +845,11 @@ void drawbar(int monitor_index) {
                 drw_rect(&drw, x + boxs, boxs, boxw, boxw, scheme[SchemeNorm], monitor->selected_client->isfixed, 0);
             }
         } else {
-            drw_rect(&drw, x, bar_gap, width, bar_height, scheme[SchemeNorm], 1, 1);
+            drw_rect(&drw, x, 0, width, bar_height, scheme[SchemeNorm], 1, 1);
         }
     }
 
-    drw_map(&drw, monitor->barwin, bar_gap, bar_gap, window_width, bar_height);
+    drw_map(&drw, monitor->barwin, 0, 0, window_width, bar_height);
 }
 
 void drawbars(void) {
@@ -2147,21 +2145,21 @@ void updatesizehints(Client *client) {
 void updatestatus(void) {
     if (!gettextprop(root, XA_WM_NAME, status_text, sizeof(status_text))) {
         strcpy(status_text, "dwm-"VERSION);
-        statusw = TextWidth(status_text) - lrpad + 2;
+        status_width = TextWidth(status_text) - lrpad + 2;
     } else {
         char *text, *s, ch;
 
-        statusw  = 0;
+        status_width  = 0;
         for (text = s = status_text; *s; s++) {
             if ((unsigned char)(*s) < ' ') {
                 ch = *s;
                 *s = '\0';
-                statusw += TextWidth(text) - lrpad;
+                status_width += TextWidth(text) - lrpad;
                 *s = ch;
                 text = s + 1;
             }
         }
-        statusw += TextWidth(text) - lrpad + 2;
+        status_width += TextWidth(text) - lrpad + 2;
     }
     drawbar(selected_monitor);
 }
