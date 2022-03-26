@@ -168,7 +168,7 @@ struct Monitor {
     int showbar: 1;
     int topbar: 1;
 
-    float mfact;
+    int mfact;
     // int nmaster;
     int num;
     int bar_height;               /* bar geometry */
@@ -820,7 +820,12 @@ void drawbar(int monitor_index) {
         // Maybe this should be (current_mode != ModeNormal)
         if (mode_info[current_mode].name) {
             current_scheme = scheme[SchemeAppLaunch];
+            int text_width = TextWidth(mode_info[current_mode].name);
             drw_text(&drw, x, bar_gap, width, bar_height - bar_gap, current_scheme, lrpad / 2, mode_info[current_mode].name, 0);
+            x += text_width;
+
+            current_scheme = scheme[SchemeNorm];
+            drw_rect(&drw, x, bar_gap, width, bar_height - bar_gap, current_scheme, 1, 1);
         } else if (monitor->selected_client) {
             // drw.scheme = scheme[SchemeNorm];
             current_scheme = scheme[SchemeNorm];
@@ -1200,7 +1205,8 @@ void tile(int monitor_index) {
                0);
     } else {
         unsigned int ty = 0;
-        unsigned int master_width = monitor->window_width * monitor->mfact;
+        float f_fact = ((float)monitor->mfact) / 100.0f;
+        unsigned int master_width = monitor->window_width * f_fact;
 
         // draw master window on left
         resize(client,
@@ -1589,16 +1595,14 @@ void toggle_layout(const Arg *arg) {
     }
 }
 
-/* arg > 1.0 will set mfact absolutely */
 void setmfact(const Arg *arg) {
-    float f;
+    int new_fact = all_monitors[selected_monitor].mfact + arg->i;
 
-    if (!arg)
+    if(!Between(new_fact, 5, 95)) {
         return;
-    f = arg->f < 1.0 ? arg->f + all_monitors[selected_monitor].mfact : arg->f - 1.0;
-    if (f < 0.05 || f > 0.95)
-        return;
-    all_monitors[selected_monitor].mfact = f;
+    }
+
+    all_monitors[selected_monitor].mfact = new_fact;
     arrange(selected_monitor);
 }
 

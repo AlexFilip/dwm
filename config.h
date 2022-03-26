@@ -13,15 +13,15 @@ static const char col_gray3[]       = "#bbbbbb";
 static const char col_gray4[]       = "#eeeeee";
 static const char col_cyan[]        = "#005577";
 static const char col_selected[]    = "#fa2106";
-static const char col_red[]         = "#aa0000";
+static const char col_app_bg[]      = "#11750a";
 
 static int gap_size                 = 6;        /* gaps between windows */
 
 static const ColorSet colors[]      = {
     /*               fg             bg         border   */
-    [SchemeNorm]      = { .fg = col_gray3,     .bg = col_gray1, .border = col_gray2 },
-    [SchemeSel]       = { .fg = col_selected,  .bg = col_gray1, .border = col_cyan  },
-    [SchemeAppLaunch] = { .fg = col_gray2,     .bg = col_red,   .border = col_gray2 },
+    [SchemeNorm]      = { .fg = col_gray3,     .bg = col_gray1,   .border = col_gray2 },
+    [SchemeSel]       = { .fg = col_selected,  .bg = col_gray1,   .border = col_cyan  },
+    [SchemeAppLaunch] = { .fg = col_gray3,     .bg = col_app_bg,  .border = col_gray2 },
 };
 
 /* tagging */
@@ -38,14 +38,17 @@ static const Rule rules[] = {
 };
 
 /* layout(s) */
-static const float mfact     = 0.55f; /* factor of master area size [0.05..0.95] */
+static const int mfact = 55; /* factor of master area size [5..95] [0.05..0.95] */
 
-static const int tile_index = 0;
-static const int monocle_index = 1;
+enum {
+    tile_index = 0,
+    monocle_index = 1,
+};
+
 static const Layout layouts[] = {
     // NOTE: NULL is not a supported state in this fork of dwm
-    { .arrange = tile },    /* first entry is default */
-    { .arrange = monocle },
+    [tile_index]    = { .arrange = tile },    /* first entry is default */
+    [monocle_index] = { .arrange = monocle },
 };
 
 /* key definitions */
@@ -91,24 +94,19 @@ static Key keys[] = {
 
     // TODO: Consider putting these in a separate array and not checking modifier if mode == Normal
     { MODKEY,                       ModeBrowser,  XK_b,      spawn_browser,    {.v = "--profile-directory=Personal"} },
-    { 0,                            ModeBrowser,  XK_b,      spawn_browser,    {.v = "--profile-directory=Personal"} },
-    { MODKEY,                       ModeBrowser,  XK_p,      spawn_browser,    {.v = "--profile-directory=Play"} },
-    { 0,                            ModeBrowser,  XK_p,      spawn_browser,    {.v = "--profile-directory=Play"} },
-    { MODKEY,                       ModeBrowser,  XK_m,      spawn_browser,    {.v = "--profile-directory=Music"} },
-    { 0,                            ModeBrowser,  XK_m,      spawn_browser,    {.v = "--profile-directory=Music"} },
+    { MODKEY,                       ModeBrowser,  XK_p,      spawn_browser,    {.v = "--profile-directory=Play"}     },
+    { MODKEY,                       ModeBrowser,  XK_m,      spawn_browser,    {.v = "--profile-directory=Music"}    },
     { MODKEY,                       ModeBrowser,  XK_r,      spawn_browser,    {.v = "--profile-directory=Research"} },
-    { 0,                            ModeBrowser,  XK_r,      spawn_browser,    {.v = "--profile-directory=Research"} },
 
     { MODKEY,                       ModeBrowser,  XK_Escape, pop_mode,         {0} },
-    { 0,                            ModeBrowser,  XK_Escape, pop_mode,         {0} },
 
     { MODKEY,                       ModeNormal,   XK_p,      spawn,            {.v = htopcmd} },
     { MODKEY,                       ModeNormal,   XK_f,      toggle_layout,    {0} },
 
     { MODKEY,                       ModeNormal,   XK_h,      focusstack,       {.i = -1} },
     { MODKEY,                       ModeNormal,   XK_l,      focusstack,       {.i = +1} },
-    { MODKEY,                       ModeNormal,   XK_j,      setmfact,         {.f = -0.05f} },
-    { MODKEY,                       ModeNormal,   XK_k,      setmfact,         {.f = +0.05f} },
+    { MODKEY,                       ModeNormal,   XK_j,      setmfact,         {.i = -5} },
+    { MODKEY,                       ModeNormal,   XK_k,      setmfact,         {.i = +5} },
 
     { MODKEY|ShiftMask,             ModeNormal,   XK_j,      move_vert,        {.i = +1} },
     { MODKEY|ShiftMask,             ModeNormal,   XK_k,      move_vert,        {.i = -1} },
