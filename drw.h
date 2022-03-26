@@ -24,7 +24,7 @@ struct Drw {
 	Window root;
 	Drawable drawable;
 	GC gc;
-	XftColor *scheme;
+	// XftColor *scheme;
 	Fnt *fonts;
 };
 
@@ -34,6 +34,8 @@ struct ColorSet {
     const char *bg;
     const char *border;
 };
+
+static const int numColorsInSet = sizeof(ColorSet) / sizeof(const char*);
 
 /* Drawable abstraction */
 void drw_init(Drw *drw, Display *display, int screen, Window win, unsigned int w, unsigned int h);
@@ -54,8 +56,8 @@ void drw_scm_create(Drw *drw, const ColorSet* colorset, XftColor *xft_color);
 Cur drw_cur_create(Drw *drw, int shape);
 
 /* Drawing functions */
-void drw_rect(Drw *drw, int x, int y, unsigned int w, unsigned int h, int filled, int invert);
-int drw_text(Drw *drw, int x, int y, unsigned int w, unsigned int h, unsigned int lpad, const char *text, int invert);
+void drw_rect(Drw *drw, int x, int y, unsigned int width, unsigned int height, XftColor* scheme, int filled, int invert);
+int drw_text(Drw *drw, int x, int y, unsigned int width, unsigned int height, XftColor* scheme, unsigned int lpad, const char *text, int invert);
 
 /* Map functions */
 void drw_map(Drw *drw, Window win, int x, int y, unsigned int w, unsigned int h);

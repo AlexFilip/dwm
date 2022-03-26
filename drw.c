@@ -196,11 +196,14 @@ void drw_scm_create(Drw *drw, const ColorSet* colorset, XftColor *xft_color) {
     drw_clr_create(drw, &xft_color[2], colorset->border);
 }
 
-void drw_rect(Drw *drw, int x, int y, unsigned int width, unsigned int height, int filled, int invert) {
-    if (!drw->scheme)
+void drw_rect(Drw *drw, int x, int y, unsigned int width, unsigned int height, XftColor* scheme, int filled, int invert) {
+    if (!scheme)
         return;
 
-    XSetForeground(drw->display, drw->gc, invert ? drw->scheme[ColBg].pixel : drw->scheme[ColFg].pixel);
+    // if (!drw->scheme)
+    //     return;
+
+    XSetForeground(drw->display, drw->gc, invert ? scheme[ColBg].pixel : scheme[ColFg].pixel);
 
     if (filled)
         XFillRectangle(drw->display, drw->drawable, drw->gc, x, y, width, height);
@@ -208,7 +211,7 @@ void drw_rect(Drw *drw, int x, int y, unsigned int width, unsigned int height, i
         XDrawRectangle(drw->display, drw->drawable, drw->gc, x, y, width - 1, height - 1);
 }
 
-int drw_text(Drw *drw, int x, int y, unsigned int start_width, unsigned int height, unsigned int lpad, const char *text, int invert) {
+int drw_text(Drw *drw, int x, int y, unsigned int start_width, unsigned int height, XftColor* scheme, unsigned int lpad, const char *text, int invert) {
     unsigned int width = start_width;
     char buf[1024];
     unsigned int ew;
@@ -224,13 +227,13 @@ int drw_text(Drw *drw, int x, int y, unsigned int start_width, unsigned int heig
     XftResult result;
     int charexists = 0;
 
-    if ((render && !drw->scheme) || !text || !drw->fonts)
+    if ((render && !scheme) || !text || !drw->fonts)
         return 0;
 
     if (!render) {
         width = ~width;
     } else {
-        XSetForeground(drw->display, drw->gc, drw->scheme[invert ? ColFg : ColBg].pixel);
+        XSetForeground(drw->display, drw->gc, scheme[invert ? ColFg : ColBg].pixel);
         XFillRectangle(drw->display, drw->drawable, drw->gc, x, y, width, height);
         d = XftDrawCreate(drw->display, drw->drawable,
                           DefaultVisual(drw->display, drw->screen),
@@ -280,7 +283,7 @@ int drw_text(Drw *drw, int x, int y, unsigned int start_width, unsigned int heig
 
                 if (render) {
                     int ty = y + (height - usedfont->height) / 2 + usedfont->xfont->ascent;
-                    XftDrawStringUtf8(d, &drw->scheme[invert ? ColBg : ColFg],
+                    XftDrawStringUtf8(d, &scheme[invert ? ColBg : ColFg],
                                       usedfont->xfont, x, ty, (XftChar8 *)buf, len);
                 }
                 x += ew;
@@ -331,6 +334,7 @@ int drw_text(Drw *drw, int x, int y, unsigned int start_width, unsigned int heig
             }
         }
     }
+
     if (d)
         XftDrawDestroy(d);
 
@@ -338,9 +342,6 @@ int drw_text(Drw *drw, int x, int y, unsigned int start_width, unsigned int heig
 }
 
 void drw_map(Drw *drw, Window win, int x, int y, unsigned int width, unsigned int height) {
-    // if (!drw)
-    //     return;
-
     XCopyArea(drw->display, drw->drawable, win, drw->gc, x, y, width, height, x, y);
     XSync(drw->display, False);
 }
@@ -348,7 +349,7 @@ void drw_map(Drw *drw, Window win, int x, int y, unsigned int width, unsigned in
 unsigned int drw_fontset_getwidth(Drw *drw, const char *text) {
     if (!drw->fonts || !text)
         return 0;
-    return drw_text(drw, 0, 0, 0, 0, 0, text, 0);
+    return drw_text(drw, 0, 0, 0, 0, NULL, 0, text, 0);
 }
 
 void drw_font_getexts(Fnt *font, const char *text, unsigned int len, unsigned int *width, unsigned int *height) {
