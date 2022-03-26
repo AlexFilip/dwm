@@ -91,8 +91,15 @@ enum { WMProtocols, WMDelete, WMState, WMTakeFocus, WMLast }; /* default atoms *
 enum { ClkTagBar, ClkStatusText, ClkWinTitle,
        ClkClientWin, ClkRootWin, ClkLast }; /* clicks */
 
+typedef struct Array Array;
+struct Array {
+    void* content;
+    int length;
+};
+
 enum {
     ModeNormal,
+    ModeQuit,
     ModeBrowser,
 };
 
@@ -152,7 +159,6 @@ struct Client {
 typedef struct Key Key;
 struct Key {
     unsigned int mod;
-    int mode;
     KeySym keysym;
     void (*func)(const Arg *);
     const Arg arg;
@@ -295,13 +301,13 @@ static void maprequest(XEvent *event);
 
 /* variables */
 static const char broken[] = "broken";
-static char stext[256];
+static char status_text[256];
 static int statusw;
 static int statussig;
 static pid_t statuspid = -1;
 static int screen;
 static int screen_width, screen_height;           /* X global_display screen geometry width, height */
-static int bar_height;      /* bar geometry */
+static int global_bar_height;       /* bar geometry */
 static int lrpad;            /* sum of left and right padding for text */
 static int (*xerrorxlib)(Display *, XErrorEvent *);
 static unsigned int numlockmask = 0;
@@ -336,6 +342,7 @@ static Window root, wmcheckwin;
 
 static Mode mode_info[] = {
     [ModeNormal]  = { .name = NULL, },
+    [ModeQuit]    = { .name = "Quit?" },
     [ModeBrowser] = { .name = "Browser", },
 };
 
@@ -415,10 +422,11 @@ int applysizehints(Client *client, int *x, int *y, int *width, int *height, int 
             *y = monitor->window_y;
     }
 
-    if (*height < bar_height)
-        *height = bar_height;
-    if (*width < bar_height)
-        *width = bar_height;
+    if (*height < global_bar_height)
+        *height = global_bar_height;
+
+    if (*width < global_bar_height)
+        *width = global_bar_height;
 
     if (client->isfloating) {
         /* see last two sentences in ICCCM 4.1.2.3 */
@@ -514,7 +522,7 @@ void buttonpress(XEvent *event) {
     Arg arg = {0};
     Client *client;
     XButtonPressedEvent *ev = &event->xbutton;
- 	char *text, *s, ch;
+ 	char *text, ch;
 
     unsigned int click = ClkRootWin;
 
@@ -526,7 +534,9 @@ void buttonpress(XEvent *event) {
         focus(NULL);
     }
 
-    if (ev->window == all_monitors[selected_monitor].barwin) {
+    Monitor *monitor = &all_monitors[selected_monitor];
+
+    if (ev->window == monitor->barwin) {
         i = x = 0;
 
         int occupied = 0;
@@ -535,7 +545,8 @@ void buttonpress(XEvent *event) {
         }
 
         do {
-            if (occupied & (1 << i) || monitor_index == selected_monitor) { 
+            int tag_mask = (1 << i);
+            if (occupied & tag_mask || tag_mask & monitor->selected_tags & tag_mask) { 
                 x += TextWidth(tags[i]);
             }
         } while (ev->x >= x && ++i < ArrayLength(tags));
@@ -547,13 +558,12 @@ void buttonpress(XEvent *event) {
             x = all_monitors[selected_monitor].window_width - statusw;
             click = ClkStatusText;
             statussig = 0;
-            for (text = s = stext; *s && x <= ev->x; s++) {
-                if ((unsigned char)(*s) < ' ') {
-                    ch = *s;
-                    *s = '\0';
+            for (text = status_text; *text && x <= ev->x; text++) {
+                if ((unsigned char)(*text) < ' ') {
+                    ch = *text;
+                    *text = '\0';
                     x += TextWidth(text) - lrpad;
-                    *s = ch;
-                    text = s + 1;
+                    *text = ch;
                     if (x >= ev->x)
                         break;
                     statussig = ch;
@@ -569,10 +579,15 @@ void buttonpress(XEvent *event) {
         click = ClkClientWin;
     }
 
-    for (i = 0; i < ArrayLength(buttons); i++)
-        if (click == buttons[i].click && buttons[i].func && buttons[i].button == ev->button
-        && CleanMask(buttons[i].mask) == CleanMask(ev->state))
-            buttons[i].func(click == ClkTagBar && buttons[i].arg.i == 0 ? &arg : &buttons[i].arg);
+    for (int i = 0; i < ArrayLength(buttons); i++) {
+        if (click == buttons[i].click &&
+            buttons[i].func &&
+            buttons[i].button == ev->button &&
+            CleanMask(buttons[i].mask) == CleanMask(ev->state)) {
+            buttons[i].func((click == ClkTagBar && buttons[i].arg.i == 0) ? &arg : &buttons[i].arg);
+            break;
+        }
+    }
 }
 
 void cleanup_monitor(int monitor_index) {
@@ -758,9 +773,10 @@ int dirtomon(int dir) {
 }
 
 void drawbar(int monitor_index) {
-    static const int bar_gap = 10;
+    static const int bar_gap = 0;
     int x, text_width = 0;
-    XftColor* current_scheme = NULL;
+    int bar_height = global_bar_height + 30;
+    int text_height = global_bar_height;
 
     Monitor *monitor = &all_monitors[monitor_index];
     if (!monitor->showbar)
@@ -768,25 +784,25 @@ void drawbar(int monitor_index) {
 
     int window_width = monitor->window_width - bar_gap * 2;
 
-    /* draw status first so it can be overdrawn by tags later */
-    if (monitor_index == selected_monitor) { /* status is only drawn on selected monitor */
-        char *text;
-        // drw.scheme = scheme[SchemeNorm];
-        current_scheme = scheme[SchemeNorm];
+    drw_rect(&drw, bar_gap, bar_gap, window_width, bar_height, scheme[SchemeNorm], 1, 1);
 
+    /* draw status first so it can be overdrawn by tags later */
+    if (monitor_index == selected_monitor) {
+        /* status is only drawn on selected monitor */
+        char *text;
         x = bar_gap;
-        for (text = stext; *text; text++) {
+        for (text = status_text; *text; text++) {
             if ((unsigned char)(*text) < ' ') {
                 char prev_char = *text;
                 *text = '\0';
                 text_width = TextWidth(text) - lrpad;
-                drw_text(&drw, window_width - statusw + x, bar_gap, text_width, bar_height, current_scheme, 0, text, 0);
+                drw_text(&drw, window_width - statusw + x, bar_gap, text_width, text_height, scheme[SchemeNorm], 0, text, 0);
                 x += text_width;
                 *text = prev_char;
             }
         }
         text_width = TextWidth(text) - lrpad + 2;
-        drw_text(&drw, window_width - statusw + x, bar_gap, text_width, bar_height, current_scheme, 0, text, 0);
+        drw_text(&drw, window_width - statusw + x, bar_gap, text_width, text_height, scheme[SchemeNorm], 0, text, 0);
         text_width = statusw;
     }
 
@@ -801,12 +817,10 @@ void drawbar(int monitor_index) {
     // Draw tags
     x = bar_gap;
     for (unsigned int i = 0; i < ArrayLength(tags); i++) {
-        int monitor_is_selected = monitor->selected_tags & (1 << i);
-        if (occupied & (1 << i) || monitor_is_selected) {
+        int tag_is_selected = monitor->selected_tags & (1 << i);
+        if (occupied & (1 << i) || tag_is_selected) {
             int text_width = TextWidth(tags[i]);
-            // drw.scheme = scheme[monitor_is_selected ? SchemeSel : SchemeNorm];
-            current_scheme = scheme[monitor_is_selected ? SchemeSel : SchemeNorm];
-            drw_text(&drw, x, bar_gap, text_width, bar_height - bar_gap, current_scheme, lrpad / 2, tags[i], urg & (1 << i));
+            drw_text(&drw, x, bar_gap, text_width, text_height, scheme[tag_is_selected ? SchemeSel : SchemeNorm], lrpad / 2, tags[i], urg & (1 << i));
 
             x += text_width;
         }
@@ -819,30 +833,25 @@ void drawbar(int monitor_index) {
 
         // Maybe this should be (current_mode != ModeNormal)
         if (mode_info[current_mode].name) {
-            current_scheme = scheme[SchemeAppLaunch];
             int text_width = TextWidth(mode_info[current_mode].name);
-            drw_text(&drw, x, bar_gap, width, bar_height - bar_gap, current_scheme, lrpad / 2, mode_info[current_mode].name, 0);
+            drw_text(&drw, x, bar_gap, width, text_height, scheme[SchemeAppLaunch], lrpad / 2, mode_info[current_mode].name, 0);
             x += text_width;
 
-            current_scheme = scheme[SchemeNorm];
-            drw_rect(&drw, x, bar_gap, width, bar_height - bar_gap, current_scheme, 1, 1);
+            drw_rect(&drw, x, bar_gap, width, bar_height, scheme[SchemeNorm], 1, 1);
         } else if (monitor->selected_client) {
-            // drw.scheme = scheme[SchemeNorm];
-            current_scheme = scheme[SchemeNorm];
-            drw_text(&drw, x, bar_gap, width, bar_height - bar_gap, current_scheme, lrpad / 2, monitor->selected_client->name, 0);
+            drw_text(&drw, x, bar_gap, width, text_height, scheme[SchemeNorm], lrpad / 2, monitor->selected_client->name, 0);
             if (monitor->selected_client->isfloating) {
                 // Box to indicate floating window
                 int boxw = drw.fonts->height / 6 + 2;
                 int boxs = drw.fonts->height / 9;
-                drw_rect(&drw, x + boxs, boxs, boxw, boxw, current_scheme, monitor->selected_client->isfixed, 0);
+                drw_rect(&drw, x + boxs, boxs, boxw, boxw, scheme[SchemeNorm], monitor->selected_client->isfixed, 0);
             }
         } else {
-            // drw.scheme = scheme[SchemeNorm];
-            current_scheme = scheme[SchemeNorm];
-            drw_rect(&drw, x, bar_gap, width, bar_height + bar_gap, current_scheme, 1, 1);
+            drw_rect(&drw, x, bar_gap, width, bar_height, scheme[SchemeNorm], 1, 1);
         }
     }
-    drw_map(&drw, monitor->barwin, 0, 0, window_width, bar_height);
+
+    drw_map(&drw, monitor->barwin, bar_gap, bar_gap, window_width, bar_height);
 }
 
 void drawbars(void) {
@@ -1048,22 +1057,15 @@ void grabkeys(void) {
 
         XUngrabKey(global_display, AnyKey, AnyModifier, root);
         for (unsigned int i = 0; i < ArrayLength(keys); i++) {
-            KeyCode code = XKeysymToKeycode(global_display, keys[i].keysym);
-            if (code != 0) {
-                for (unsigned int j = 0; j < ArrayLength(modifiers); j++) {
-                    XGrabKey(global_display, code, keys[i].mod | modifiers[j], root, True, GrabModeAsync, GrabModeAsync);
+            Key* key_array = (Key*) keys[i].content;
+            int  length    = keys[i].length;
+            for(unsigned int key_index = 0; key_index < length; ++key_index) {
+                KeyCode code = XKeysymToKeycode(global_display, key_array[key_index].keysym);
+                if (code != 0) {
+                    for (unsigned int mod_index = 0; mod_index < ArrayLength(modifiers); mod_index++) {
+                        XGrabKey(global_display, code, key_array[key_index].mod | modifiers[mod_index], root, True, GrabModeAsync, GrabModeAsync);
+                    }
                 }
-            }
-        }
-
-        KeySym number_keys[] = { XK_0, XK_1, XK_2, XK_3, XK_4, XK_5, XK_6, XK_7, XK_8, XK_9 };
-        for(unsigned int i = 0; i < ArrayLength(number_keys); ++i) {
-            KeyCode code = XKeysymToKeycode(global_display, number_keys[i]);
-            for (int j = 0; j < ArrayLength(modifiers); j++) {
-                XGrabKey(global_display, code, MODKEY|modifiers[j], root, True, GrabModeAsync, GrabModeAsync);
-                XGrabKey(global_display, code, MODKEY|ShiftMask|modifiers[j], root, True, GrabModeAsync, GrabModeAsync);
-                XGrabKey(global_display, code, MODKEY|ControlMask|modifiers[j], root, True, GrabModeAsync, GrabModeAsync);
-                XGrabKey(global_display, code, MODKEY|ShiftMask|ControlMask|modifiers[j], root, True, GrabModeAsync, GrabModeAsync);
             }
         }
     }
@@ -1116,7 +1118,7 @@ void manage(Window window, XWindowAttributes *wa) {
     client->x = Maximum(client->x, monitor->screen_x);
     /* only fix client y-offset, if the client center might cover the bar */
     client->y = Maximum(client->y, ((monitor->bar_height == monitor->screen_y) && (client->x + (client->width / 2) >= monitor->window_x)
-                                && (client->x + (client->width / 2) < monitor->window_x + monitor->window_width)) ? bar_height : monitor->screen_y);
+                                    && (client->x + (client->width / 2) < monitor->window_x + monitor->window_width)) ? global_bar_height : monitor->screen_y);
     client->border_width = borderpx;
 
     wc.border_width = client->border_width;
@@ -1623,7 +1625,7 @@ void setup(void) {
     if (!drw_fontset_create(&drw, fonts, ArrayLength(fonts)))
         die("no fonts could be loaded.");
     lrpad = drw.fonts->height;
-    bar_height = drw.fonts->height + 10;
+    global_bar_height = drw.fonts->height + 10;
     updategeom();
     /* init atoms */
     utf8string                     = XInternAtom(global_display, "UTF8_STRING", False);
@@ -1653,11 +1655,11 @@ void setup(void) {
         drw_scm_create(&drw, &colors[i], xft_color);
         scheme[i] = xft_color;
     }
-    
+
     for (i = 0; i < ArrayLength(colors); i++)
 
-    /* init bars */
-    updatebars();
+        /* init bars */
+        updatebars();
     updatestatus();
     /* supporting window for NetWMCheck */
     wmcheckwin = XCreateSimpleWindow(global_display, root, 0, 0, 1, 1, 0, 0, 0);
@@ -1937,7 +1939,7 @@ void updatebars(void) {
         if(monitor->is_valid) {
             if (monitor->barwin)
                 continue;
-            monitor->barwin = XCreateWindow(global_display, root, monitor->window_x, monitor->bar_height, monitor->window_width, bar_height, 0, DefaultDepth(global_display, screen),
+            monitor->barwin = XCreateWindow(global_display, root, monitor->window_x, monitor->bar_height, monitor->window_width, global_bar_height, 0, DefaultDepth(global_display, screen),
                                             CopyFromParent, DefaultVisual(global_display, screen),
                                             CWOverrideRedirect|CWBackPixmap|CWEventMask, &wa);
             XDefineCursor(global_display, monitor->barwin, cursor[CurNormal].cursor);
@@ -1953,11 +1955,11 @@ void updatebarpos(int monitor_index) {
     monitor->window_y = monitor->screen_y;
     monitor->window_height = monitor->screen_height;
     if (monitor->showbar) {
-        monitor->window_height -= bar_height;
+        monitor->window_height -= global_bar_height;
         monitor->bar_height = monitor->topbar ? monitor->window_y : monitor->window_y + monitor->window_height;
-        monitor->window_y = monitor->topbar ? monitor->window_y + bar_height : monitor->window_y;
+        monitor->window_y = monitor->topbar ? monitor->window_y + global_bar_height : monitor->window_y;
     } else
-        monitor->bar_height = -bar_height;
+        monitor->bar_height = -global_bar_height;
 }
 
 int updategeom(void) {
@@ -2143,14 +2145,14 @@ void updatesizehints(Client *client) {
 }
 
 void updatestatus(void) {
-    if (!gettextprop(root, XA_WM_NAME, stext, sizeof(stext))) {
-        strcpy(stext, "dwm-"VERSION);
-        statusw = TextWidth(stext) - lrpad + 2;
+    if (!gettextprop(root, XA_WM_NAME, status_text, sizeof(status_text))) {
+        strcpy(status_text, "dwm-"VERSION);
+        statusw = TextWidth(status_text) - lrpad + 2;
     } else {
         char *text, *s, ch;
 
         statusw  = 0;
-        for (text = s = stext; *s; s++) {
+        for (text = s = status_text; *s; s++) {
             if ((unsigned char)(*s) < ' ') {
                 ch = *s;
                 *s = '\0';
@@ -2430,7 +2432,7 @@ int main(int argc, char *argv[]) {
                     screen_height = ev->height;
 
                     if (updategeom() || dirty) {
-                        drw_resize(&drw, screen_width, bar_height);
+                        drw_resize(&drw, screen_width, global_bar_height);
                         updatebars();
                         for (int monitor_index = 0; monitor_index < monitor_capacity; ++monitor_index) {
                             Monitor *monitor = &all_monitors[monitor_index];
@@ -2440,7 +2442,7 @@ int main(int argc, char *argv[]) {
                                         resizeclient(client, monitor->screen_x, monitor->screen_y, monitor->screen_width, monitor->screen_height);
                                     }
                                 }
-                                XMoveResizeWindow(global_display, monitor->barwin, monitor->window_x, monitor->bar_height, monitor->window_width, bar_height);
+                                XMoveResizeWindow(global_display, monitor->barwin, monitor->window_x, monitor->bar_height, monitor->window_width, global_bar_height);
                             }
                         }
                         focus(NULL);
@@ -2496,33 +2498,17 @@ int main(int argc, char *argv[]) {
                 XKeyEvent *ev = &event.xkey;
                 KeySym keysym = XKeycodeToKeysym(global_display, (KeyCode)ev->keycode, 0);
 
-                if(Between(keysym, XK_1, XK_9)) {
-                    unsigned long tag_shift = keysym - XK_1;
-                    unsigned long clean_mask = CleanMask(ev->state);
+                unsigned int i = 0;
+                int current_mode = mode_stack[current_mode_index];
+                Key* key_array = (Key*)keys[current_mode].content;
+                int length = keys[current_mode].length;
 
-                    const Arg arg = { .ui = (1 << tag_shift) };
-
-                    if(clean_mask == MODKEY) {
-                        view(&arg);
-                    } else if(clean_mask == CleanMask(MODKEY|ControlMask)) {
-                        toggleview(&arg);
-                    } else if(clean_mask == CleanMask(MODKEY|ShiftMask)) {
-                        tag(&arg);
-                    } else if(clean_mask == CleanMask(MODKEY|ControlMask|ShiftMask)) {
-                        toggletag(&arg);
-                    }
-
-                } else {
-                    unsigned int i = 0;
-                    int current_mode = mode_stack[current_mode_index];
-                    for(; i < ArrayLength(keys); i++) {
-                        Key* key = &keys[i];
-                        if (keysym == key->keysym &&
-                            CleanMask(key->mod) == CleanMask(ev->state) &&
-                            current_mode == key->mode) {
-                            key->func(&(key->arg));
-                            break;
-                        }
+                for(; i < length; i++) {
+                    Key* key = &key_array[i];
+                    if (keysym == key->keysym &&
+                        CleanMask(key->mod) == CleanMask(ev->state)) {
+                        key->func(&(key->arg));
+                        break;
                     }
                 }
 

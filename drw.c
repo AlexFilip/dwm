@@ -200,9 +200,6 @@ void drw_rect(Drw *drw, int x, int y, unsigned int width, unsigned int height, X
     if (!scheme)
         return;
 
-    // if (!drw->scheme)
-    //     return;
-
     XSetForeground(drw->display, drw->gc, invert ? scheme[ColBg].pixel : scheme[ColFg].pixel);
 
     if (filled)

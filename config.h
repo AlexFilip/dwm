@@ -58,11 +58,11 @@ static const Layout layouts[] = {
 #define MODKEY Mod4Mask
 #endif
 
-#define TAGKEYS(KEY,TAG) \
-    { MODKEY,                       ModeNormal,  KEY,      view,           { .ui = 1 << TAG } }, \
-    { MODKEY|ControlMask,           ModeNormal,  KEY,      toggleview,     { .ui = 1 << TAG } }, \
-    { MODKEY|ShiftMask,             ModeNormal,  KEY,      tag,            { .ui = 1 << TAG } }, \
-    { MODKEY|ControlMask|ShiftMask, ModeNormal,  KEY,      toggletag,      { .ui = 1 << TAG } }
+#define TAGKEYS(KEY) \
+    { MODKEY,                       KEY,      view,           { .ui = 1 << (KEY - XK_1) } }, \
+    { MODKEY|ControlMask,           KEY,      toggleview,     { .ui = 1 << (KEY - XK_1) } }, \
+    { MODKEY|ShiftMask,             KEY,      tag,            { .ui = 1 << (KEY - XK_1) } }, \
+    { MODKEY|ControlMask|ShiftMask, KEY,      toggletag,      { .ui = 1 << (KEY - XK_1) } }
 
 /* helper for spawning shell commands in the pre dwm-5.0 fashion */
 #define SHCMD(cmd) { .v = (const char*[]){ "/bin/sh", "-c", cmd, NULL } }
@@ -85,77 +85,92 @@ static char const*    termcmd[ ] = { "st", NULL };
 static char const*  editorcmd[ ] = { "st", "nvim", NULL };
 static char const*    htopcmd[ ] = { "st", "htop", NULL };
 
-static Key keys[] = {
+static const Key normal_mode_keys[] = {
     /* modifier                     mode          key        function          argument */
-    { MODKEY,                       ModeNormal,   XK_space,  spawn,            {.v = dmenucmd} },
-    { MODKEY,                       ModeNormal,   XK_t,      spawn,            {.v = termcmd} },
-    { MODKEY,                       ModeNormal,   XK_e,      spawn,            {.v = editorcmd} },
-    { MODKEY,                       ModeNormal,   XK_b,      push_mode,        {.i = ModeBrowser} },
+    { MODKEY,                       XK_space,  spawn,            {.v = dmenucmd} },
+    { MODKEY,                       XK_t,      spawn,            {.v = termcmd} },
+    { MODKEY,                       XK_e,      spawn,            {.v = editorcmd} },
+    { MODKEY,                       XK_b,      push_mode,        {.i = ModeBrowser} },
 
-    // TODO: Consider putting these in a separate array and not checking modifier if mode == Normal
-    { MODKEY,                       ModeBrowser,  XK_b,      spawn_browser,    {.v = "--profile-directory=Personal"} },
-    { MODKEY,                       ModeBrowser,  XK_p,      spawn_browser,    {.v = "--profile-directory=Play"}     },
-    { MODKEY,                       ModeBrowser,  XK_m,      spawn_browser,    {.v = "--profile-directory=Music"}    },
-    { MODKEY,                       ModeBrowser,  XK_r,      spawn_browser,    {.v = "--profile-directory=Research"} },
+    { MODKEY,                       XK_p,      spawn,            {.v = htopcmd} },
+    { MODKEY,                       XK_f,      toggle_layout,    {0} },
 
-    { MODKEY,                       ModeBrowser,  XK_Escape, pop_mode,         {0} },
+    { MODKEY,                       XK_h,      focusstack,       {.i = -1} },
+    { MODKEY,                       XK_l,      focusstack,       {.i = +1} },
+    { MODKEY,                       XK_j,      setmfact,         {.i = -5} },
+    { MODKEY,                       XK_k,      setmfact,         {.i = +5} },
 
-    { MODKEY,                       ModeNormal,   XK_p,      spawn,            {.v = htopcmd} },
-    { MODKEY,                       ModeNormal,   XK_f,      toggle_layout,    {0} },
+    { MODKEY|ShiftMask,             XK_j,      move_vert,        {.i = +1} },
+    { MODKEY|ShiftMask,             XK_k,      move_vert,        {.i = -1} },
 
-    { MODKEY,                       ModeNormal,   XK_h,      focusstack,       {.i = -1} },
-    { MODKEY,                       ModeNormal,   XK_l,      focusstack,       {.i = +1} },
-    { MODKEY,                       ModeNormal,   XK_j,      setmfact,         {.i = -5} },
-    { MODKEY,                       ModeNormal,   XK_k,      setmfact,         {.i = +5} },
+    { MODKEY|ShiftMask,             XK_h,      move_horiz,       {.i = -1} },
+    { MODKEY|ShiftMask,             XK_l,      move_horiz,       {.i = +1} },
 
-    { MODKEY|ShiftMask,             ModeNormal,   XK_j,      move_vert,        {.i = +1} },
-    { MODKEY|ShiftMask,             ModeNormal,   XK_k,      move_vert,        {.i = -1} },
+    { MODKEY,                       XK_slash,  togglefloating,   {0} },
 
-    { MODKEY|ShiftMask,             ModeNormal,   XK_h,      move_horiz,       {.i = -1} },
-    { MODKEY|ShiftMask,             ModeNormal,   XK_l,      move_horiz,       {.i = +1} },
+    { MODKEY,                       XK_Return, make_main_client, {0} },
+    { MODKEY,                       XK_Tab,    view,             {0} },
+    { MODKEY,                       XK_w,      killclient,       {0} },
 
-    { MODKEY,                       ModeNormal,   XK_slash,  togglefloating,   {0} },
+    { MODKEY,                       XK_comma,  focusmon,         {.i = -1} },
+    { MODKEY,                       XK_period, focusmon,         {.i = +1} },
 
-    { MODKEY,                       ModeNormal,   XK_Return, make_main_client, {0} },
-    { MODKEY,                       ModeNormal,   XK_Tab,    view,             {0} },
-    { MODKEY,                       ModeNormal,   XK_w,      killclient,       {0} },
+    { MODKEY|ShiftMask,             XK_comma,  tagmon,           {.i = -1} },
+    { MODKEY|ShiftMask,             XK_period, tagmon,           {.i = +1} },
 
-    { MODKEY,                       ModeNormal,   XK_comma,  focusmon,         {.i = -1} },
-    { MODKEY,                       ModeNormal,   XK_period, focusmon,         {.i = +1} },
+    { MODKEY,                       XK_0,      view,             {.ui = ~0} },
+    { MODKEY|ShiftMask,             XK_0,      tag,              {.ui = ~0} },
 
-    { MODKEY|ShiftMask,             ModeNormal,   XK_comma,  tagmon,           {.i = -1} },
-    { MODKEY|ShiftMask,             ModeNormal,   XK_period, tagmon,           {.i = +1} },
+    TAGKEYS(XK_1),
+    TAGKEYS(XK_2),
+    TAGKEYS(XK_3),
+    TAGKEYS(XK_4),
+    TAGKEYS(XK_5),
+    TAGKEYS(XK_6),
+    TAGKEYS(XK_7),
+    TAGKEYS(XK_8),
+    TAGKEYS(XK_9),
 
-    { MODKEY,                       ModeNormal,   XK_0,      view,             {.ui = ~0} },
-    { MODKEY|ShiftMask,             ModeNormal,   XK_0,      tag,              {.ui = ~0} },
-
-    // TAGKEYS(                        XK_1,                      0)
-    // TAGKEYS(                        XK_2,                      1)
-    // TAGKEYS(                        XK_3,                      2)
-    // TAGKEYS(                        XK_4,                      3)
-    // TAGKEYS(                        XK_5,                      4)
-    // TAGKEYS(                        XK_6,                      5)
-    // TAGKEYS(                        XK_7,                      6)
-    // TAGKEYS(                        XK_8,                      7)
-    // TAGKEYS(                        XK_9,                      8)
-
-    { MODKEY|ShiftMask,             ModeNormal,   XK_q,      quit,             {0} },
-    { MODKEY,                       ModeNormal,   XK_y,      resize_window,    { .i = +1 } },
-    { MODKEY|ShiftMask,             ModeNormal,   XK_y,      resize_window,    { .i = -1 } },
-    { MODKEY|ControlMask,           ModeNormal,   XK_y,      change_window_aspect_ratio,     { .i = -1 } },
-    { MODKEY|ControlMask|ShiftMask, ModeNormal,   XK_y,      change_window_aspect_ratio,     { .i = +1 } },
+    { MODKEY|ShiftMask,             XK_q,      push_mode,        { .i = ModeQuit } },
+    { MODKEY,                       XK_y,      resize_window,    { .i = +1 } },
+    { MODKEY|ShiftMask,             XK_y,      resize_window,    { .i = -1 } },
+    { MODKEY|ControlMask,           XK_y,      change_window_aspect_ratio,     { .i = -1 } },
+    { MODKEY|ControlMask|ShiftMask, XK_y,      change_window_aspect_ratio,     { .i = +1 } },
 
     // Volume controls
-    { 0, ModeNormal,   XF86XK_AudioRaiseVolume,   spawn, { .v = volume_up   } },
-    { 0, ModeNormal,   XF86XK_AudioLowerVolume,   spawn, { .v = volume_down } },
-    { 0, ModeNormal,   XF86XK_AudioMute,          spawn, { .v = volume_mute } },
-    { 0, ModeNormal,   XF86XK_AudioMicMute,       spawn, { .v = mic_mute    } },
+    { 0, XF86XK_AudioRaiseVolume,   spawn, { .v = volume_up   } },
+    { 0, XF86XK_AudioLowerVolume,   spawn, { .v = volume_down } },
+    { 0, XF86XK_AudioMute,          spawn, { .v = volume_mute } },
+    { 0, XF86XK_AudioMicMute,       spawn, { .v = mic_mute    } },
 
     // Screen brightness controls
     // NOTE: This doesn't work because of the '~' in the path. I'll fix it later.
-    { 0, ModeNormal, XF86XK_MonBrightnessUp,   spawn, { .v = brightness_up   } },
-    { 0, ModeNormal, XF86XK_MonBrightnessDown, spawn, { .v = brightness_down } },
+    { 0, XF86XK_MonBrightnessUp,   spawn, { .v = brightness_up   } },
+    { 0, XF86XK_MonBrightnessDown, spawn, { .v = brightness_down } },
 };
+
+static const Key quit_mode_keys[] = {
+    { MODKEY, XK_Escape, pop_mode, {0} },
+    { MODKEY, XK_n,      pop_mode, {0} },
+
+    { MODKEY, XK_y, quit, {0} },
+};
+
+static const Key browser_mode_keys[] = {
+    { MODKEY, XK_Escape, pop_mode,         {0} },
+
+    { MODKEY, XK_b,      spawn_browser,    {.v = "--profile-directory=Personal"} },
+    { MODKEY, XK_p,      spawn_browser,    {.v = "--profile-directory=Play"}     },
+    { MODKEY, XK_m,      spawn_browser,    {.v = "--profile-directory=Music"}    },
+    { MODKEY, XK_r,      spawn_browser,    {.v = "--profile-directory=Research"} },
+};
+
+static const Array keys[] = {
+    [ModeNormal]  = { (void*)normal_mode_keys,  ArrayLength(normal_mode_keys) },
+    [ModeQuit]    = { (void*)quit_mode_keys,    ArrayLength(quit_mode_keys) },
+    [ModeBrowser] = { (void*)browser_mode_keys, ArrayLength(browser_mode_keys) },
+};
+
 
 /* button definitions */
 /* click can be ClkTagBar, ClkLtSymbol, ClkStatusText, ClkWinTitle, ClkClientWin, or ClkRootWin */
