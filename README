@@ -54,4 +54,4 @@ To run a nested X session and debug dwm you need Xnest installed
 With it run `Xnest :1` in one terminal and `DISPLAY=:1 ./dwm` in another. If you generate debug symbols with `-g` you can use gdb with `DISPLAY=:1 gdb ./dwm`.
 Here, :1 is the display number, as :0 is the default and would conflict with the active X session. Additionally, the config.h for this project changes the modifier key to Alt if you define `DEBUG` with `-DDEBUG`.
 
-To test on multiple monitors use Xephyr and make sure xrandr and xinerama are enabled. For example `Xephyr -screen 960x540+0+20 -screen 960x540+960+20 +extension RANDR  +xinerama :1`
+To test on multiple monitors use Xephyr and make sure xrandr and xinerama are enabled. For example `Xephyr -screen 960x540+0+25 -screen 960x540+960+25 +extension RANDR  +xinerama :1`

@@ -5,7 +5,10 @@ static const unsigned int borderpx  = 2;        /* border pixel of windows */
 static const unsigned int snap      = 32;       /* snap pixel */
 static const int showbar            = 1;        /* 0 means no bar */
 static const int topbar             = 1;        /* 0 means bottom bar */
-static const char *fonts[]          = { "monospace:size=12" };
+static int gap_size                 = 6;        /* gaps between windows */
+
+
+static const char *fonts[]          = { "monospace:size=12", "Hack:size=11" };
 static const char dmenufont[]       = "monospace:size=12";
 static const char col_gray1[]       = "#222222";
 static const char col_gray2[]       = "#444444";
@@ -15,10 +18,8 @@ static const char col_cyan[]        = "#005577";
 static const char col_selected[]    = "#fa2106";
 static const char col_app_bg[]      = "#11750a";
 
-static int gap_size                 = 6;        /* gaps between windows */
 
 static const ColorSet colors[]      = {
-    /*               fg             bg         border   */
     [SchemeNorm]      = { .fg = col_gray3,     .bg = col_gray1,   .border = col_gray2 },
     [SchemeSel]       = { .fg = col_selected,  .bg = col_gray1,   .border = col_cyan  },
     [SchemeAppLaunch] = { .fg = col_gray3,     .bg = col_app_bg,  .border = col_gray2 },
@@ -27,15 +28,14 @@ static const ColorSet colors[]      = {
 /* tagging */
 static const char *tags[] = { "Main", ">_", "3", "4", "5", "6", "7", "8", "9" };
 
-static const Rule rules[] = {
-    /* xprop(1):
-     *    WM_CLASS(STRING) = instance, class
-     *    WM_NAME(STRING) = title
-     */
-    /* class     instance  title   tags mask   isfloating   monitor */
-    { "Gimp",    NULL,     NULL,   0,          1,           -1 },
-    { "Firefox", NULL,     NULL,   1 << 8,     0,           -1 },
-};
+// static const Rule rules[] = {
+//     /* xprop(1):
+//      *    WM_CLASS(STRING) = instance, class
+//      *    WM_NAME(STRING) = title
+//      */
+//     // { .class = "Gimp",    .instance = NULL, .title = NULL, .tags = 0,      .isfloating = 1, .monitor_number = -1 },
+//     // { .class = "Firefox", .instance = NULL, .title = NULL, .tags = 1 << 8, .isfloating = 0, .monitor_number = -1 },
+// };
 
 /* layout(s) */
 static const int mfact = 55; /* factor of master area size [5..95] [0.05..0.95] */
@@ -53,8 +53,10 @@ static const Layout layouts[] = {
 
 /* key definitions */
 #ifdef DEBUG
+// Use Alt
 #define MODKEY Mod1Mask
 #else
+// Use Windows/Command/etc.
 #define MODKEY Mod4Mask
 #endif
 
@@ -65,7 +67,7 @@ static const Layout layouts[] = {
     { MODKEY|ControlMask|ShiftMask, KEY,      toggletag,      { .ui = 1 << (KEY - XK_1) } }
 
 /* helper for spawning shell commands in the pre dwm-5.0 fashion */
-#define SHCMD(cmd) { .v = (const char*[]){ "/bin/sh", "-c", cmd, NULL } }
+#define ShellCommand(cmd) { .v = (const char*[]){ "/bin/sh", "-c", cmd, NULL } }
 
 // #define STATUSBAR "dwmblocks"
 #define STATUSBAR "spoon"
@@ -79,21 +81,20 @@ static const char* brightness_up[]   = { "/home/alex/bin/backlight" "+1", NULL }
 static const char* brightness_down[] = { "/home/alex/bin/backlight" "-1", NULL };
 
 /* commands */
-static char          dmenumon[2] = "0"; /* component of dmenucmd, manipulated in spawn() */
-static char const*   dmenucmd[ ] = { "dmenu_run", "-m", dmenumon, "-fn", dmenufont, "-nb", col_gray1, "-nf", col_gray3, "-sb", col_cyan, "-sf", col_gray4, NULL };
-static char const*    termcmd[ ] = { "st", NULL };
-static char const*  editorcmd[ ] = { "st", "nvim", NULL };
-static char const*    htopcmd[ ] = { "st", "htop", NULL };
+static char const       term[] = "st";
+#define TermCommand(...) { .v = (const char*[]){ term, __VA_ARGS__, NULL } }
 
 static const Key normal_mode_keys[] = {
-    /* modifier                     mode          key        function          argument */
-    { MODKEY,                       XK_space,  spawn,            {.v = dmenucmd} },
-    { MODKEY,                       XK_t,      spawn,            {.v = termcmd} },
-    { MODKEY,                       XK_e,      spawn,            {.v = editorcmd} },
-    { MODKEY,                       XK_b,      push_mode,        {.i = ModeBrowser} },
+    /* modifier                     key        function          argument */
+    { MODKEY,                       XK_space,  spawn_dmenu,      {0} },
+    { MODKEY,                       XK_t,      spawn,            TermCommand(NULL) },
+    { MODKEY,                       XK_e,      spawn,            TermCommand("nvim") },
 
-    { MODKEY,                       XK_p,      spawn,            {.v = htopcmd} },
+    { MODKEY,                       XK_p,      spawn,            TermCommand("htop") },
     { MODKEY,                       XK_f,      toggle_layout,    {0} },
+
+    { MODKEY,                       XK_b,      push_mode,        {.i = ModeBrowser} },
+    { MODKEY,                       XK_s,      push_mode,        {.i = ModeSurfBrowser} },
 
     { MODKEY,                       XK_h,      focusstack,       {.i = -1} },
     { MODKEY,                       XK_l,      focusstack,       {.i = +1} },
@@ -151,26 +152,47 @@ static const Key normal_mode_keys[] = {
 
 static const Key quit_mode_keys[] = {
     { MODKEY, XK_Escape, pop_mode, {0} },
+    {      0, XK_Escape, pop_mode, {0} },
+
     { MODKEY, XK_n,      pop_mode, {0} },
+    {      0, XK_n,      pop_mode, {0} },
 
     { MODKEY, XK_y, quit, {0} },
+    {      0, XK_y, quit, {0} },
 };
 
 static const Key browser_mode_keys[] = {
     { MODKEY, XK_Escape, pop_mode,         {0} },
+    {      0, XK_Escape, pop_mode,         {0} },
 
-    { MODKEY, XK_b,      spawn_browser,    {.v = "--profile-directory=Personal"} },
-    { MODKEY, XK_p,      spawn_browser,    {.v = "--profile-directory=Play"}     },
-    { MODKEY, XK_m,      spawn_browser,    {.v = "--profile-directory=Music"}    },
-    { MODKEY, XK_r,      spawn_browser,    {.v = "--profile-directory=Research"} },
+    { MODKEY, XK_b, spawn_browser, {.v = "--profile-directory=Personal"} },
+    { MODKEY, XK_p, spawn_browser, {.v = "--profile-directory=Play"}     },
+    { MODKEY, XK_m, spawn_browser, {.v = "--profile-directory=Music"}    },
+    { MODKEY, XK_r, spawn_browser, {.v = "--profile-directory=Research"} },
+
+    {      0, XK_b, spawn_browser, {.v = "--profile-directory=Personal"} },
+    {      0, XK_p, spawn_browser, {.v = "--profile-directory=Play"}     },
+    {      0, XK_m, spawn_browser, {.v = "--profile-directory=Music"}    },
+    {      0, XK_r, spawn_browser, {.v = "--profile-directory=Research"} },
+};
+
+static const Key surf_mode_keys[] = {
+    { MODKEY, XK_Escape, pop_mode,         {0} },
+    {      0, XK_Escape, pop_mode,         {0} },
+
+    { MODKEY, XK_s, spawn_surf, {.v = "~/.surf/cookies-personal.txt"} },
+    {      0, XK_s, spawn_surf, {.v = "~/.surf/cookies-personal.txt"} },
+
+    { MODKEY, XK_p, spawn_surf, {.v = "/dev/null"} },
+    {      0, XK_p, spawn_surf, {.v = "/dev/null"} },
 };
 
 static const Array keys[] = {
-    [ModeNormal]  = { (void*)normal_mode_keys,  ArrayLength(normal_mode_keys) },
-    [ModeQuit]    = { (void*)quit_mode_keys,    ArrayLength(quit_mode_keys) },
-    [ModeBrowser] = { (void*)browser_mode_keys, ArrayLength(browser_mode_keys) },
+    [ModeNormal]      = { (void*)normal_mode_keys,  ArrayLength(normal_mode_keys) },
+    [ModeQuit]        = { (void*)quit_mode_keys,    ArrayLength(quit_mode_keys) },
+    [ModeBrowser]     = { (void*)browser_mode_keys, ArrayLength(browser_mode_keys) },
+    [ModeSurfBrowser] = { (void*)surf_mode_keys, ArrayLength(surf_mode_keys) }
 };
-
 
 /* button definitions */
 /* click can be ClkTagBar, ClkLtSymbol, ClkStatusText, ClkWinTitle, ClkClientWin, or ClkRootWin */

@@ -73,11 +73,9 @@ void drw_init(Drw* drw, Display *display, int screen, Window root, unsigned int 
 }
 
 void drw_resize(Drw *drw, unsigned int width, unsigned int height) {
-    // if (!drw)
-    //     return;
-
-    drw->width = width;
+    drw->width  = width;
     drw->height = height;
+
     if (drw->drawable)
         XFreePixmap(drw->display, drw->drawable);
 
@@ -213,11 +211,8 @@ int drw_text(Drw *drw, int x, int y, unsigned int start_width, unsigned int heig
     char buf[1024];
     unsigned int ew;
     XftDraw *d = NULL;
-    Fnt *usedfont, *curfont, *nextfont;
-    size_t i, len;
-    int utf8strlen, utf8charlen, render = x || y || width || height;
+    int utf8charlen, render = x || y || width || height;
     long utf8codepoint = 0;
-    const char *utf8str;
     FcCharSet *fccharset;
     FcPattern *fcpattern;
     FcPattern *match;
@@ -239,14 +234,14 @@ int drw_text(Drw *drw, int x, int y, unsigned int start_width, unsigned int heig
         width -= lpad;
     }
 
-    usedfont = drw->fonts;
+    Fnt *usedfont = drw->fonts;
     while (1) {
-        utf8strlen = 0;
-        utf8str = text;
-        nextfont = NULL;
+        int utf8strlen = 0;
+        const char *utf8str = text;
+        Fnt *nextfont = NULL;
         while (*text) {
             utf8charlen = utf8decode(text, &utf8codepoint, UTF_SIZ);
-            for (curfont = drw->fonts; curfont; curfont = curfont->next) {
+            for (Fnt *curfont = drw->fonts; curfont; curfont = curfont->next) {
                 charexists = charexists || XftCharExists(drw->display, curfont->xfont, utf8codepoint);
                 if (charexists) {
                     if (curfont == usedfont) {
@@ -268,6 +263,7 @@ int drw_text(Drw *drw, int x, int y, unsigned int start_width, unsigned int heig
         if (utf8strlen) {
             drw_font_getexts(usedfont, utf8str, utf8strlen, &ew, NULL);
             /* shorten text if necessary */
+            size_t len;
             for (len = Minimum(utf8strlen, sizeof(buf) - 1); len && ew > width; len--)
                 drw_font_getexts(usedfont, utf8str, len, &ew, NULL);
 
@@ -275,7 +271,7 @@ int drw_text(Drw *drw, int x, int y, unsigned int start_width, unsigned int heig
                 memcpy(buf, utf8str, len);
                 buf[len] = '\0';
                 if (len < utf8strlen)
-                    for (i = len; i && i > len - 3; buf[--i] = '.')
+                    for (size_t i = len; i && i > len - 3; buf[--i] = '.')
                         ; /* NOP */
 
                 if (render) {
@@ -321,6 +317,7 @@ int drw_text(Drw *drw, int x, int y, unsigned int start_width, unsigned int heig
             if (match) {
                 usedfont = xfont_create(drw, NULL, match);
                 if (usedfont && XftCharExists(drw->display, usedfont->xfont, utf8codepoint)) {
+                    Fnt *curfont;
                     for (curfont = drw->fonts; curfont->next; curfont = curfont->next)
                         ; /* NOP */
                     curfont->next = usedfont;
@@ -344,8 +341,9 @@ void drw_map(Drw *drw, Window win, int x, int y, unsigned int width, unsigned in
 }
 
 unsigned int drw_fontset_getwidth(Drw *drw, const char *text) {
-    if (!drw->fonts || !text)
+    if (!drw->fonts)
         return 0;
+
     return drw_text(drw, 0, 0, 0, 0, NULL, 0, text, 0);
 }
 
@@ -356,11 +354,15 @@ void drw_font_getexts(Fnt *font, const char *text, unsigned int len, unsigned in
         return;
 
     XftTextExtentsUtf8(font->display, font->xfont, (XftChar8 *)text, len, &ext);
-    if (width)
-        *width = ext.xOff;
+    
+    // The only places that call this function pass in NULL for the height an
+    // a stack pointer for the width.
 
-    if (height)
-        *height = font->height;
+    // if (width)
+    *width = ext.xOff;
+
+    // if (height)
+    //     *height = font->height;
 }
 
 Cur drw_cur_create(Drw *drw, int shape) {
