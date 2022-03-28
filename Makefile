@@ -6,6 +6,8 @@ include config.mk
 SRC = drw.c dwm.c util.c
 OBJ = $(addprefix obj/, ${SRC:.c=.o})
 
+StatusBarPath = ${DESTDIR}${PREFIX}/bin/status
+
 all: options dwm
 
 options:
@@ -15,7 +17,7 @@ options:
 	@echo "CC      = ${CC}"
 
 obj/%.o: %.c
-	${CC} -c ${CFLAGS} $< -o $@
+	${CC} -DStatusBarPath=\"${StatusBarPath}\" -c ${CFLAGS} $< -o $@
 
 ${OBJ}: config.h config.mk
 
@@ -30,13 +32,14 @@ clean:
 
 dist: clean
 	mkdir -p dwm-${VERSION}
-	cp -R LICENSE Makefile README config.def.h config.mk\
+	cp -R LICENSE Makefile README config.def.h config.mk \
 		dwm.1 drw.h util.h ${SRC} dwm.png transient.c dwm-${VERSION}
 	tar -cf dwm-${VERSION}.tar dwm-${VERSION}
 	gzip dwm-${VERSION}.tar
 	rm -rf dwm-${VERSION}
 
 install: all
+	strip dwm
 	mkdir -p ${DESTDIR}${PREFIX}/bin
 	cp -f dwm ${DESTDIR}${PREFIX}/bin
 	chmod 755 ${DESTDIR}${PREFIX}/bin/dwm

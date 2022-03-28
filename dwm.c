@@ -23,9 +23,10 @@
 
 /* TODO:
  *  - Bring status bar into this project
+ *    - NOTE: All of the status bar code will go into the "status" folder
  *    - Look at anybar code and see if it's a good idea to use
  *    - Compile both dwm and status bar at the same time
- *    - Path of status bar should be compiled into dwm using -D flag
+ *    - Path of status bar should be compiled into dwm using -D flag (StatusBarFlag in Makefile)
  *    - Dwm should execute status bar
  *    - If it crashes, dwm should restart it
  *    - Status bar displays status, tags, etc. responds to clicks and communicates to dwm to switch tag
@@ -1478,25 +1479,34 @@ fn void unmanage(Client *client, int destroyed) {
     arrange(monitor);
 }
 
+
+
+static void closepipe(int pipe[2]) {
+    close(pipe[0]);
+    close(pipe[1]);
+}
+
 typedef struct StatusBarInfo StatusBarInfo;
 struct StatusBarInfo {
     pid_t pid;
     int read_end;
-    // int write_end;
+    int write_end;
 };
 
 fn StatusBarInfo start_status_bar(void) {
     // If the status bar handles its own click events, why do we need wm_to_status?
+    // wm_to_status tells the status bar which tags to show
+    // status_to_wm tells dwm what was clicked
     struct StatusBarInfo result = {0};
-    // int wm_to_status[2] = {0};
+    int wm_to_status[2] = {0};
     int status_to_wm[2] = {0};
 
-    // pipe(wm_to_status);
+    pipe(wm_to_status);
     pipe(status_to_wm);
 
     pid_t status_bar_pid = fork();
     if(status_bar_pid == 0) {
-        // close(wm_to_status[1]);
+        close(wm_to_status[1]);
         close(status_to_wm[0]);
 
         char* args[] = { STATUSBAR, NULL };
@@ -1507,18 +1517,17 @@ fn StatusBarInfo start_status_bar(void) {
     }
 
     if(status_bar_pid < 0) {
-        // close the pipe entirely
-        // close(wm_to_status[1]);
-        close(status_to_wm[0]);
+        // Error when forking
+        closepipe(wm_to_status);
+        closepipe(status_to_wm);
     } else {
         result.read_end  = status_to_wm[0];
-        // result.write_end = wm_to_status[1];
+        result.write_end = wm_to_status[1];
+        close(wm_to_status[0]);
+        close(status_to_wm[1]);
     }
 
     result.pid = status_bar_pid;
-
-    // close(wm_to_status[0]);
-    close(status_to_wm[1]);
 
     return result;
 }
@@ -2282,7 +2291,10 @@ fn void sigchld(int unused) {
     // TODO: Handle dead app launcher or status bar
     if (signal(SIGCHLD, sigchld) == SIG_ERR)
         die("can't install SIGCHLD handler:");
-    while (0 < waitpid(-1, NULL, WNOHANG));
+
+    while (0 < waitpid(-1, NULL, WNOHANG)) {
+        // 
+    }
 }
 
 fn void setup(Display *display) {
