@@ -6,10 +6,6 @@
  * events about window (dis-)appearance. Only one X connection at a time is
  * allowed to select for this event mask.
  *
- * The event handlers of dwm are organized in an array which is accessed
- * whenever a new event has been fetched. This allows event dispatching
- * in O(1) time.
- *
  * Each child of the root window is called a client, except windows which have
  * set the override_redirect flag. Clients are organized in a linked client
  * list on each monitor, the focus history is remembered through a stack list
@@ -44,7 +40,7 @@
  *  - Create a secondary process that loads a dynamic library and runs it
  *    - In the dynamic library, set the value of the status bar and handle keyboard shortcuts to launch apps
  *    - If the process dies (for whatever reason), dwm can report it and revive it when a keyboard shortcut is pressed or when the library is replaced with a new version
- *    - Some shortcuts should be kept in dwm in case the process crashes. That way the user can continue to fix the issue. (probably just vim and dmenu are needed
+ *    - Some shortcuts should be kept in dwm in case the process crashes. That way the user can continue to fix the issue. (probably just vim, the terminal and dmenu are needed)
  *    - If the library is recompiled and placed into a known location then it should be reloaded
  */
 
@@ -91,7 +87,7 @@
 
 /* enums */
 enum { CurNormal, CurResize, CurMove, CurLast }; /* cursor */
-enum { SchemeNorm, SchemeSel, SchemeAppLaunch }; /* color schemes */
+enum { SchemeNorm, SchemeSel, SchemeBar, SchemeAppLaunch }; /* color schemes */
 enum { NetSupported, NetWMName, NetWMState, NetWMCheck,
        NetWMFullscreen, NetActiveWindow, NetWMWindowType,
        NetWMWindowTypeDialog, NetClientList, NetLast }; /* EWMH atoms */
@@ -117,21 +113,31 @@ struct Mode {
     char* name;
 };
 
-typedef union Arg Arg;
-union Arg {
+
+typedef union ActionDetails ActionDetails;
+union ActionDetails {
     int i;
     unsigned int ui;
     float f;
     const void *v;
 };
+typedef void Action(const ActionDetails *arg);
 
 typedef struct Button Button;
 struct Button {
     unsigned int click;
     unsigned int mask;
     unsigned int button;
-    void (*func)(const Arg *arg);
-    const Arg arg;
+    Action *func;
+    const ActionDetails arg;
+};
+
+typedef struct Key Key;
+struct Key {
+    unsigned int mod;
+    KeySym keysym;
+    Action *func;
+    const ActionDetails arg;
 };
 
 typedef struct Monitor Monitor;
@@ -162,14 +168,6 @@ struct Client {
     Client *next_in_stack;
     int monitor; // index into all_monitors array
     Window window;
-};
-
-typedef struct Key Key;
-struct Key {
-    unsigned int mod;
-    KeySym keysym;
-    void (*func)(const Arg *);
-    const Arg arg;
 };
 
 typedef struct Layout Layout;
@@ -217,37 +215,38 @@ fn void monocle(int monitor_index);
 fn void tile(int monitor_index);
 
 // Commands
-fn void focusmon(const Arg *arg);
-fn void focusstack(const Arg *arg);
-fn void killclient(const Arg *arg);
-fn void movemouse(const Arg *arg);
-fn void quit(const Arg *arg);
-fn void resizemouse(const Arg *arg);
-fn void toggle_layout(const Arg *arg);
-fn void setmfact(const Arg *arg);
-fn void sigstatusbar(const Arg *arg);
-fn void spawn(const Arg *arg);
-fn void spawn_dmenu(const Arg *unused);
-fn void spawn_and_reset_mode(const Arg *arg);
-fn void spawn_browser(const Arg *arg);
-fn void spawn_surf(const Arg *arg);
-fn void tag(const Arg *arg);
-fn void tagmon(const Arg *arg);
-fn void togglefloating(const Arg *arg);
-fn void toggletag(const Arg *arg);
-fn void toggleview(const Arg *arg);
-fn void resize_window(const Arg *arg);
-fn void move_vert(const Arg *arg);
-fn void move_horiz(const Arg *arg);
-fn void change_window_aspect_ratio(const Arg *arg);
-fn void view(const Arg *arg);
-fn void make_main_client(const Arg *arg);
+fn void do_nothing(const ActionDetails *arg);
+fn void focusmon(const ActionDetails *arg);
+fn void focusstack(const ActionDetails *arg);
+fn void killclient(const ActionDetails *arg);
+fn void movemouse(const ActionDetails *arg);
+fn void quit(const ActionDetails *arg);
+fn void resizemouse(const ActionDetails *arg);
+fn void toggle_layout(const ActionDetails *arg);
+fn void setmfact(const ActionDetails *arg);
+fn void sigstatusbar(const ActionDetails *arg);
+fn void spawn_action(const ActionDetails *arg);
+fn void spawn_dmenu(const ActionDetails *unused);
+fn void spawn_brave(const ActionDetails *arg);
+fn void spawn_firefox(const ActionDetails *arg);
+fn void spawn_surf(const ActionDetails *arg);
+fn void tag(const ActionDetails *arg);
+fn void tagmon(const ActionDetails *arg);
+fn void togglefloating(const ActionDetails *arg);
+fn void toggletag(const ActionDetails *arg);
+fn void toggleview(const ActionDetails *arg);
+fn void resize_window(const ActionDetails *arg);
+fn void move_vert(const ActionDetails *arg);
+fn void move_horiz(const ActionDetails *arg);
+fn void change_window_aspect_ratio(const ActionDetails *arg);
+fn void view(const ActionDetails *arg);
+fn void make_main_client(const ActionDetails *arg);
 
-fn void push_mode(const Arg* arg);
-fn void pop_mode(const Arg* arg);
-fn void reset_mode(const Arg* arg);
+fn void push_mode_action(const ActionDetails* arg);
+fn void pop_mode_action(const ActionDetails* arg);
+// fn void reset_mode_action(const ActionDetails* arg);
 
-/* variables */
+/* Variables */
 global const char broken[] = "broken";
 global char status_text[256];
 global int status_width;
@@ -493,9 +492,9 @@ fn void showhide(Client *client) {
 }
 
 fn void drawbar(int monitor_index) {
-    int x, text_width = 0;
     int bar_height  = global_bar_height;
-    int text_height = global_bar_height;
+    int bottom_bar_height = 3;
+    int text_height = global_bar_height - bottom_bar_height;
 
     Monitor *monitor = &all_monitors[monitor_index];
     if (!monitor->showbar)
@@ -508,21 +507,21 @@ fn void drawbar(int monitor_index) {
     /* draw status first so it can be overdrawn by tags later */
     if (monitor_index == selected_monitor) {
         /* status is only drawn on selected monitor */
-        char *text;
-        x = 0;
-        for (text = status_text; *text; text++) {
-            if ((unsigned char)(*text) < ' ') {
-                char prev_char = *text;
-                *text = '\0';
-                text_width = TextWidth(text) - lrpad;
-                drw_text(&drw, window_width - status_width + x, 0, text_width, text_height, scheme[SchemeNorm], 0, text, 0);
-                x += text_width;
-                *text = prev_char;
+
+        char *s, *text;
+        char ch;
+        for (text = s = status_text; *s; s++) {
+            if ((unsigned char)(*s) < ' ') {
+                ch = *s;
+                *s = '\0';
+                status_width += TextWidth(text) - lrpad;
+                *s = ch;
+                text = s + 1;
             }
         }
-        text_width = TextWidth(status_text) - lrpad + 2;
-        drw_text(&drw, window_width - status_width + x, 0, text_width, text_height, scheme[SchemeNorm], 0, status_text, 0);
-        text_width = status_width;
+
+        status_width = TextWidth(status_text) - lrpad + 2;
+        drw_text(&drw, window_width - status_width, 0, status_width, text_height, scheme[SchemeNorm], 0, status_text, 0);
     }
 
     // Create occupancy mask
@@ -534,19 +533,21 @@ fn void drawbar(int monitor_index) {
     }
 
     // Draw tags
-    x = 0;
+    int x = 0;
     for (unsigned int i = 0; i < ArrayLength(tags); i++) {
         int tag_is_selected = monitor->selected_tags & (1 << i);
         if (occupied & (1 << i) || tag_is_selected) {
             int text_width = TextWidth(tags[i]);
             drw_text(&drw, x, 0, text_width, text_height, scheme[tag_is_selected ? SchemeSel : SchemeNorm], lrpad / 2, tags[i], urg & (1 << i));
-
+            if(tag_is_selected) {
+                drw_rect(&drw, x, bar_height - bottom_bar_height, text_width, bottom_bar_height, scheme[SchemeBar], 1, 0);
+            }
             x += text_width;
         }
     }
 
     // Draw things after tags (current client name, mode, etc.)
-    int width = window_width - text_width - x;
+    int width = window_width - status_width - x;
     if (width > bar_height) {
         int current_mode = mode_stack[mode_stack_top];
 
@@ -566,8 +567,8 @@ fn void drawbar(int monitor_index) {
                 int boxs = drw.fonts->height / 9;
                 drw_rect(&drw, x + boxs, boxs, boxw, boxw, scheme[SchemeNorm], monitor->selected_client->isfixed, 0);
             }
-        } else {
-            drw_rect(&drw, x, 0, width, bar_height, scheme[SchemeNorm], 1, 1);
+        // } else {
+        //     drw_rect(&drw, x, 0, width, bar_height, scheme[SchemeNorm], 1, 1);
         }
     }
 
@@ -872,13 +873,9 @@ fn void focus(Client *client) {
 }
 
 fn void buttonpress(XEvent *event) {
-    unsigned int i, x;
-    Arg arg = {0};
+    ActionDetails arg = {0};
     Client *client;
     XButtonPressedEvent *ev = &event->xbutton;
- 	char *text, ch;
-
-    unsigned int click = ClkRootWin;
 
     /* focus monitor if necessary */
     int monitor_index = wintomon(ev->window);
@@ -888,10 +885,10 @@ fn void buttonpress(XEvent *event) {
         focus(NULL);
     }
 
+    unsigned int click = ClkRootWin;
     Monitor *monitor = &all_monitors[selected_monitor];
-
     if (ev->window == monitor->barwin) {
-        i = x = 0;
+        unsigned int i = 0, x = 0;
 
         int occupied = 0;
         for (client = all_monitors[monitor_index].clients; client; client = client->next) {
@@ -912,12 +909,14 @@ fn void buttonpress(XEvent *event) {
             x = all_monitors[selected_monitor].window_width - status_width;
             click = ClkStatusText;
             statussig = 0;
-            for (text = status_text; *text && x <= ev->x; text++) {
-                if ((unsigned char)(*text) < ' ') {
-                    ch = *text;
-                    *text = '\0';
+            char* s;
+            for (char *text = s = status_text; *s && x <= ev->x; s++) {
+                if ((unsigned char)(*s) < ' ') {
+                    char ch = *s;
+                    *s = '\0';
                     x += TextWidth(text) - lrpad;
-                    *text = ch;
+                    *s = ch;
+                    text = s + 1;
                     if (x >= ev->x)
                         break;
                     statussig = ch;
@@ -946,6 +945,8 @@ fn void buttonpress(XEvent *event) {
 
 fn void cleanup_monitor(int monitor_index) {
     Monitor *monitor = &all_monitors[monitor_index];
+
+
     XUnmapWindow(global_display, monitor->barwin);
     XDestroyWindow(global_display, monitor->barwin);
 
@@ -1479,59 +1480,6 @@ fn void unmanage(Client *client, int destroyed) {
     arrange(monitor);
 }
 
-
-
-static void closepipe(int pipe[2]) {
-    close(pipe[0]);
-    close(pipe[1]);
-}
-
-typedef struct StatusBarInfo StatusBarInfo;
-struct StatusBarInfo {
-    pid_t pid;
-    int read_end;
-    int write_end;
-};
-
-fn StatusBarInfo start_status_bar(void) {
-    // If the status bar handles its own click events, why do we need wm_to_status?
-    // wm_to_status tells the status bar which tags to show
-    // status_to_wm tells dwm what was clicked
-    struct StatusBarInfo result = {0};
-    int wm_to_status[2] = {0};
-    int status_to_wm[2] = {0};
-
-    pipe(wm_to_status);
-    pipe(status_to_wm);
-
-    pid_t status_bar_pid = fork();
-    if(status_bar_pid == 0) {
-        close(wm_to_status[1]);
-        close(status_to_wm[0]);
-
-        char* args[] = { STATUSBAR, NULL };
-        execvp(args[0], args);
-        fprintf(stderr, "dwm: execvp " STATUSBAR);
-        perror(" failed");
-        exit(EXIT_SUCCESS);
-    }
-
-    if(status_bar_pid < 0) {
-        // Error when forking
-        closepipe(wm_to_status);
-        closepipe(status_to_wm);
-    } else {
-        result.read_end  = status_to_wm[0];
-        result.write_end = wm_to_status[1];
-        close(wm_to_status[0]);
-        close(status_to_wm[1]);
-    }
-
-    result.pid = status_bar_pid;
-
-    return result;
-}
-
 fn void updatebars(void) {
     XSetWindowAttributes wa = {
         .override_redirect = True,
@@ -1649,6 +1597,7 @@ fn int updategeom(void) {
                     attach(client);
                     attachstack(client);
                 }
+
                 if (monitor_index == selected_monitor) {
                     selected_monitor = next_valid_monitor(0);
                 }
@@ -1781,8 +1730,108 @@ fn void maprequest(XEvent *event) {
         manage(ev->window, &wa);
 }
 
+// Mode control
+
+fn void push_mode(int mode_info_index) {
+    if(mode_stack_top < ArrayLength(mode_stack)) {
+        ++mode_stack_top;
+        mode_stack[mode_stack_top] = mode_info_index;
+        grabkeys();
+        arrange(selected_monitor);
+    }
+}
+
+fn void pop_mode() {
+    if(mode_stack_top > 0) {
+        --mode_stack_top;
+        grabkeys();
+    }
+}
+
+fn void reset_mode() {
+    mode_stack_top = 0;
+    grabkeys();
+}
+
+// Process control
+static void closepipe(int pipe[2]) {
+    close(pipe[0]);
+    close(pipe[1]);
+}
+
+typedef struct ChildProcess ChildProcess;
+struct ChildProcess {
+    pid_t pid;
+    int std_output;
+    int std_input;
+};
+
+fn ChildProcess spawn(char const **command, int from_command) {
+    ChildProcess result = {0};
+    int wm_to_process[2] = {0};
+    int process_to_wm[2] = {0};
+
+    pipe(wm_to_process);
+    pipe(process_to_wm);
+
+    pid_t process_bar_pid = fork();
+    if(process_bar_pid == 0) {
+        close(wm_to_process[1]);
+        close(process_to_wm[0]);
+
+        if (from_command) {
+            if (global_display)
+                close(ConnectionNumber(global_display));
+            setsid();
+        }
+        execvp(command[0], (char **)command);
+        fprintf(stderr, "dwm: execvp %s", command[0]);
+        perror(" failed");
+        exit(EXIT_SUCCESS);
+    }
+
+    if(process_bar_pid < 0) {
+        // Error when forking
+        closepipe(wm_to_process);
+        closepipe(process_to_wm);
+    } else {
+        result.std_output  = process_to_wm[0];
+        result.std_input = wm_to_process[1];
+        close(wm_to_process[0]);
+        close(process_to_wm[1]);
+    }
+
+    result.pid = process_bar_pid;
+
+    return result;
+}
+
+fn void spawn_and_reset_mode(char const **arg) {
+    reset_mode();
+    spawn(arg, 1);
+    focus(NULL);
+}
+
 // Commands
-fn void movemouse(const Arg *arg) {
+fn void do_nothing(const ActionDetails *arg) {
+    // This is just a test command
+    // printf("Doing nothing...except printing\n");
+}
+
+fn void make_main_client(const ActionDetails *arg) {
+    Client *selected_client = all_monitors[selected_monitor].selected_client;
+
+    if(selected_client && selected_client->isfloating)
+        return;
+
+    if(selected_client == nexttiled(all_monitors[selected_monitor].clients))
+        if(!selected_client || !(selected_client = nexttiled(selected_client->next)))
+            return;
+
+    pop_client(selected_client);
+}
+
+fn void movemouse(const ActionDetails *arg) {
     Client *client;
     XEvent ev;
     Time lasttime = 0;
@@ -1857,11 +1906,11 @@ fn void movemouse(const Arg *arg) {
     }
 }
 
-fn void quit(const Arg *arg) {
+fn void quit(const ActionDetails *arg) {
     global_running = 0;
 }
 
-fn void resizemouse(const Arg *arg) {
+fn void resizemouse(const ActionDetails *arg) {
     int ocx, ocy, nw, nh;
     Client *client;
     XEvent ev;
@@ -1932,7 +1981,7 @@ fn void resizemouse(const Arg *arg) {
     }
 }
 
-// void setlayout(const Arg *arg) {
+// void setlayout(const ActionDetails *arg) {
 //     if (!arg || !arg->v || arg->v != &layouts[selected_monitor->selected_layout]) {
 //         selected_monitor->selected_layout ^= 1;
 //     }
@@ -1948,7 +1997,7 @@ fn void resizemouse(const Arg *arg) {
 //     }
 // }
 
-fn void toggle_layout(const Arg *arg) {
+fn void toggle_layout(const ActionDetails *arg) {
     all_monitors[selected_monitor].selected_layout ^= 1;
     if (all_monitors[selected_monitor].selected_client) {
         arrange(selected_monitor);
@@ -1957,7 +2006,7 @@ fn void toggle_layout(const Arg *arg) {
     }
 }
 
-fn void setmfact(const Arg *arg) {
+fn void setmfact(const ActionDetails *arg) {
     int new_fact = all_monitors[selected_monitor].mfact + arg->i;
 
     if(!Between(new_fact, 5, 95)) {
@@ -1968,7 +2017,7 @@ fn void setmfact(const Arg *arg) {
     arrange(selected_monitor);
 }
 
-fn void sigstatusbar(const Arg *arg) {
+fn void sigstatusbar(const ActionDetails *arg) {
     union sigval sv;
 
     if (!statussig)
@@ -1981,25 +2030,11 @@ fn void sigstatusbar(const Arg *arg) {
     sigqueue(statuspid, SIGRTMIN + statussig, sv);
 }
 
-fn void spawn(const Arg *arg) {
-    if (fork() == 0) {
-        if (global_display)
-            close(ConnectionNumber(global_display));
-        setsid();
-        execvp(((char **)arg->v)[0], (char **)arg->v);
-        fprintf(stderr, "dwm: execvp %s", ((char **)arg->v)[0]);
-        perror(" failed");
-        exit(EXIT_SUCCESS);
-    }
+fn void spawn_action(const ActionDetails *arg) {
+    spawn((char const **)arg->v, 1);
 }
 
-fn void spawn_and_reset_mode(const Arg *arg) {
-    reset_mode(NULL);
-    spawn(arg);
-    focus(NULL);
-}
-
-fn void spawn_dmenu(const Arg *unused) {
+fn void spawn_dmenu(const ActionDetails *unused) {
     char dmenu_monitor[] = {'0' + all_monitors[selected_monitor].num, 0 };
     char const *dmenucmd[] = {
         "dmenu_run",
@@ -2012,17 +2047,20 @@ fn void spawn_dmenu(const Arg *unused) {
         NULL
     };
 
-    const Arg arg = { .v = dmenucmd };
-    spawn(&arg);
+    spawn(dmenucmd, 1);
 }
 
-fn void spawn_browser(const Arg *arg) {
-    char const* browsercmd[ ] = { "brave-browser", arg->v, NULL };
-    Arg new_arg = { .v = browsercmd };
-    spawn_and_reset_mode(&new_arg);
+fn void spawn_brave(const ActionDetails *arg) {
+    char const* browser_command[] = { "brave-browser", arg->v, NULL };
+    spawn_and_reset_mode(browser_command);
 }
 
-fn void spawn_surf(const Arg *arg) {
+fn void spawn_firefox(const ActionDetails *arg) {
+    char const* browser_command[] = { "firefox", "-P", arg->v, NULL };
+    spawn_and_reset_mode(browser_command);
+}
+
+fn void spawn_surf(const ActionDetails *arg) {
     char const* surf_command[] = {
         "tabbed", "-r", "5", // 5 is the index of the argument to switch out with the window id
         "firejail", "--noprofile", "--hosts-file=~/.surf/blocked-hosts.txt",
@@ -2030,11 +2068,10 @@ fn void spawn_surf(const Arg *arg) {
         NULL
     };
 
-    const Arg new_arg = { .v = surf_command };
-    spawn_and_reset_mode(&new_arg);
+    spawn_and_reset_mode(surf_command);
 }
 
-fn void tag(const Arg *arg) {
+fn void tag(const ActionDetails *arg) {
     Client *selected_client = all_monitors[selected_monitor].selected_client;
     if (selected_client && arg->ui & TagMask) {
         selected_client->tags = arg->ui & TagMask;
@@ -2043,7 +2080,7 @@ fn void tag(const Arg *arg) {
     }
 }
 
-fn void tagmon(const Arg *arg) {
+fn void tagmon(const ActionDetails *arg) {
     Client *selected_client = all_monitors[selected_monitor].selected_client;
     if (!selected_client)
         return;
@@ -2054,7 +2091,7 @@ fn void tagmon(const Arg *arg) {
     }
 }
 
-fn void togglefloating(const Arg *arg) {
+fn void togglefloating(const ActionDetails *arg) {
     Monitor *monitor = &all_monitors[selected_monitor];
     Client *selected_client = monitor->selected_client;
 
@@ -2074,7 +2111,7 @@ fn void togglefloating(const Arg *arg) {
     }
 }
 
-fn void toggletag(const Arg *arg) {
+fn void toggletag(const ActionDetails *arg) {
     unsigned int newtags;
 
     Client *selected_client = all_monitors[selected_monitor].selected_client;
@@ -2088,7 +2125,7 @@ fn void toggletag(const Arg *arg) {
     }
 }
 
-fn void toggleview(const Arg *arg) {
+fn void toggleview(const ActionDetails *arg) {
     unsigned int newtagset = all_monitors[selected_monitor].selected_tags ^ (arg->ui & TagMask);
     if (newtagset) {
         all_monitors[selected_monitor].selected_tags = newtagset;
@@ -2097,7 +2134,7 @@ fn void toggleview(const Arg *arg) {
     }
 }
 
-fn void resize_window(const Arg *arg) {
+fn void resize_window(const ActionDetails *arg) {
     Client *selected_client = all_monitors[selected_monitor].selected_client;
     int resize_amount = arg->i > 0 ? 5 : -5;
 
@@ -2117,7 +2154,7 @@ fn void resize_window(const Arg *arg) {
     }
 }
 
-fn void move_vert(const Arg *arg) {
+fn void move_vert(const ActionDetails *arg) {
     Client *selected_client = all_monitors[selected_monitor].selected_client;
 
     int move_amount = arg->i > 0 ? 5 : -5;
@@ -2131,7 +2168,7 @@ fn void move_vert(const Arg *arg) {
     }
 }
 
-fn void move_horiz(const Arg *arg) {
+fn void move_horiz(const ActionDetails *arg) {
     Client *selected_client = all_monitors[selected_monitor].selected_client;
 
     int move_amount = arg->i > 0 ? 5 : -5;
@@ -2140,7 +2177,7 @@ fn void move_horiz(const Arg *arg) {
     }
 }
 
-fn void change_window_aspect_ratio(const Arg *arg) {
+fn void change_window_aspect_ratio(const ActionDetails *arg) {
     Client *selected_client = all_monitors[selected_monitor].selected_client;
 
     int resize_amount = arg->i > 0 ? 5 : -5;
@@ -2154,7 +2191,7 @@ fn void change_window_aspect_ratio(const Arg *arg) {
     }
 }
 
-fn void killclient(const Arg *arg) {
+fn void killclient(const ActionDetails *arg) {
     Client *selected_client = all_monitors[selected_monitor].selected_client;
     if (!selected_client)
         return;
@@ -2170,7 +2207,7 @@ fn void killclient(const Arg *arg) {
     }
 }
 
-fn void view(const Arg *arg) {
+fn void view(const ActionDetails *arg) {
     int new_tags = arg->ui & TagMask;
     Monitor *monitor = &all_monitors[selected_monitor];
     if (new_tags != monitor->selected_tags) {
@@ -2182,7 +2219,7 @@ fn void view(const Arg *arg) {
     }
 }
 
-fn void focusmon(const Arg *arg) {
+fn void focusmon(const ActionDetails *arg) {
     int monitor_index;
     if ((monitor_index = dirtomon(arg->i)) == selected_monitor)
         return;
@@ -2190,7 +2227,7 @@ fn void focusmon(const Arg *arg) {
     set_current_monitor(monitor_index);
 }
 
-fn void focusstack(const Arg *arg) {
+fn void focusstack(const ActionDetails *arg) {
     Client *client = NULL, *i;
 
     Monitor *monitor = &all_monitors[selected_monitor];
@@ -2216,29 +2253,19 @@ fn void focusstack(const Arg *arg) {
     }
 }
 
-fn void push_mode(const Arg *arg) {
-    int mode_info_index = arg->i;
-    if(mode_stack_top < ArrayLength(mode_stack)) {
-        ++mode_stack_top;
-        mode_stack[mode_stack_top] = mode_info_index;
-        grabkeys();
-        arrange(selected_monitor);
-    }
+fn void push_mode_action(const ActionDetails *arg) {
+    push_mode(arg->i);
 }
 
-fn void pop_mode(const Arg *arg) {
-    if(mode_stack_top > 0) {
-        --mode_stack_top;
-        grabkeys();
-    }
+fn void pop_mode_action(const ActionDetails *arg) {
+    pop_mode();
 }
 
-fn void reset_mode(const Arg *arg) {
-    mode_stack_top = 0;
-    grabkeys();
-}
+// fn void reset_mode_action(const ActionDetails *arg) {
+//     reset_mode();
+// }
 
-// void rotate(const Arg *arg) {
+// void rotate(const ActionDetails *arg) {
 //     // INCOMPLETE
 //     Monitor *monitor = &all_monitors[selected_monitor];
 // 
@@ -2268,23 +2295,20 @@ fn void reset_mode(const Arg *arg) {
 //     }
 // }
 
+// Status bar
+fn ChildProcess start_status_bar(void) {
+    // If the status bar handles its own click events, why do we need wm_to_status?
+    // wm_to_status tells the status bar which tags to show
+    // status_to_wm tells dwm what was clicked
+    char const* args[] = { STATUSBAR, NULL };
+    ChildProcess result = spawn(args, 0);
+    return result;
+}
+
 /* Startup Error handler to check if another window manager is already running. */
 fn int xerrorstart(Display *display, XErrorEvent *ee) {
     die("dwm: another window manager is already running");
     return -1;
-}
-
-fn void make_main_client(const Arg *arg) {
-    Client *selected_client = all_monitors[selected_monitor].selected_client;
-
-    if(selected_client && selected_client->isfloating)
-        return;
-
-    if(selected_client == nexttiled(all_monitors[selected_monitor].clients))
-        if(!selected_client || !(selected_client = nexttiled(selected_client->next)))
-            return;
-
-    pop_client(selected_client);
 }
 
 fn void sigchld(int unused) {
@@ -2644,7 +2668,7 @@ int main(int argc, char *argv[]) {
     }
 
     // cleanup
-    Arg a = { .ui = ~0 };
+    ActionDetails a = { .ui = ~0 };
 
     view(&a);
 

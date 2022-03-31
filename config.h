@@ -5,24 +5,24 @@ static const unsigned int borderpx  = 2;        /* border pixel of windows */
 static const unsigned int snap      = 32;       /* snap pixel */
 static const int showbar            = 1;        /* 0 means no bar */
 static const int topbar             = 1;        /* 0 means bottom bar */
-static int gap_size                 = 6;        /* gaps between windows */
+static int gap_size                 = 10;       /* gaps between windows */
 
 
-static const char *fonts[]          = { "monospace:size=12", "Hack:size=11" };
-static const char dmenufont[]       = "monospace:size=12";
-static const char col_gray1[]       = "#222222";
-static const char col_gray2[]       = "#444444";
-static const char col_gray3[]       = "#bbbbbb";
-static const char col_gray4[]       = "#eeeeee";
-static const char col_cyan[]        = "#005577";
-static const char col_selected[]    = "#fa2106";
-static const char col_app_bg[]      = "#11750a";
-
+static const char *fonts[]     = { "monospace:size=12", "Hack:size=11" };
+static const char dmenufont[]  = "monospace:size=12";
+static const char col_gray1[]  = "#222222";
+static const char col_gray2[]  = "#444444";
+static const char col_gray3[]  = "#bbbbbb";
+static const char col_gray4[]  = "#eeeeee";
+static const char col_cyan[]   = "#005577";
+// static const char col_bar[]    = "#3630f2";
+static const char col_app_bg[] = "#11750a";
 
 static const ColorSet colors[]      = {
-    [SchemeNorm]      = { .fg = col_gray3,     .bg = col_gray1,   .border = col_gray2 },
-    [SchemeSel]       = { .fg = col_selected,  .bg = col_gray1,   .border = col_cyan  },
-    [SchemeAppLaunch] = { .fg = col_gray3,     .bg = col_app_bg,  .border = col_gray2 },
+    [SchemeNorm]      = { .fg = col_gray3, .bg = col_gray1,  .border = col_gray2 },
+    [SchemeSel]       = { .fg = col_gray4, .bg = col_gray2,  .border = col_cyan  },
+    [SchemeBar]       = { .fg = col_cyan,  .bg = col_gray1,  .border = col_gray2 },
+    [SchemeAppLaunch] = { .fg = col_gray3, .bg = col_app_bg, .border = col_gray2 },
 };
 
 /* tagging */
@@ -41,8 +41,8 @@ static const char *tags[] = { "Main", ">_", "3", "4", "5", "6", "7", "8", "9" };
 static const int mfact = 55; /* factor of master area size [5..95] [0.05..0.95] */
 
 enum {
-    tile_index = 0,
-    monocle_index = 1,
+    tile_index,
+    monocle_index,
 };
 
 static const Layout layouts[] = {
@@ -87,14 +87,14 @@ static char const       term[] = "st";
 static const Key normal_mode_keys[] = {
     /* modifier                     key        function          argument */
     { MODKEY,                       XK_space,  spawn_dmenu,      {0} },
-    { MODKEY,                       XK_t,      spawn,            TermCommand(NULL) },
-    { MODKEY,                       XK_e,      spawn,            TermCommand("nvim") },
+    { MODKEY,                       XK_t,      spawn_action,    TermCommand(NULL) },
+    { MODKEY,                       XK_e,      spawn_action,    TermCommand("nvim") },
 
-    { MODKEY,                       XK_p,      spawn,            TermCommand("htop") },
+    { MODKEY,                       XK_p,      spawn_action,    TermCommand("htop") },
     { MODKEY,                       XK_f,      toggle_layout,    {0} },
 
-    { MODKEY,                       XK_b,      push_mode,        {.i = ModeBrowser} },
-    { MODKEY,                       XK_s,      push_mode,        {.i = ModeSurfBrowser} },
+    { MODKEY,                       XK_b,      push_mode_action,        {.i = ModeBrowser} },
+    { MODKEY,                       XK_s,      push_mode_action,        {.i = ModeSurfBrowser} },
 
     { MODKEY,                       XK_h,      focusstack,       {.i = -1} },
     { MODKEY,                       XK_l,      focusstack,       {.i = +1} },
@@ -132,53 +132,59 @@ static const Key normal_mode_keys[] = {
     TAGKEYS(XK_8),
     TAGKEYS(XK_9),
 
-    { MODKEY|ShiftMask,             XK_q,      push_mode,        { .i = ModeQuit } },
+    { MODKEY|ShiftMask,             XK_q,      push_mode_action,        { .i = ModeQuit } },
     { MODKEY,                       XK_y,      resize_window,    { .i = +1 } },
     { MODKEY|ShiftMask,             XK_y,      resize_window,    { .i = -1 } },
     { MODKEY|ControlMask,           XK_y,      change_window_aspect_ratio,     { .i = -1 } },
     { MODKEY|ControlMask|ShiftMask, XK_y,      change_window_aspect_ratio,     { .i = +1 } },
 
     // Volume controls
-    { 0, XF86XK_AudioRaiseVolume,   spawn, { .v = volume_up   } },
-    { 0, XF86XK_AudioLowerVolume,   spawn, { .v = volume_down } },
-    { 0, XF86XK_AudioMute,          spawn, { .v = volume_mute } },
-    { 0, XF86XK_AudioMicMute,       spawn, { .v = mic_mute    } },
+    { 0, XF86XK_AudioRaiseVolume,   spawn_action, { .v = volume_up   } },
+    { 0, XF86XK_AudioLowerVolume,   spawn_action, { .v = volume_down } },
+    { 0, XF86XK_AudioMute,          spawn_action, { .v = volume_mute } },
+    { 0, XF86XK_AudioMicMute,       spawn_action, { .v = mic_mute    } },
 
     // Screen brightness controls
     // NOTE: This doesn't work because of the '~' in the path. I'll fix it later.
-    { 0, XF86XK_MonBrightnessUp,   spawn, { .v = brightness_up   } },
-    { 0, XF86XK_MonBrightnessDown, spawn, { .v = brightness_down } },
+    { 0, XF86XK_MonBrightnessUp,   spawn_action, { .v = brightness_up   } },
+    { 0, XF86XK_MonBrightnessDown, spawn_action, { .v = brightness_down } },
 };
 
 static const Key quit_mode_keys[] = {
-    { MODKEY, XK_Escape, pop_mode, {0} },
-    {      0, XK_Escape, pop_mode, {0} },
+    { MODKEY, XK_Escape, pop_mode_action, {0} },
+    {      0, XK_Escape, pop_mode_action, {0} },
 
-    { MODKEY, XK_n,      pop_mode, {0} },
-    {      0, XK_n,      pop_mode, {0} },
+    { MODKEY, XK_n,      pop_mode_action, {0} },
+    {      0, XK_n,      pop_mode_action, {0} },
 
     { MODKEY, XK_y, quit, {0} },
     {      0, XK_y, quit, {0} },
 };
 
 static const Key browser_mode_keys[] = {
-    { MODKEY, XK_Escape, pop_mode,         {0} },
-    {      0, XK_Escape, pop_mode,         {0} },
+    { MODKEY, XK_Escape, pop_mode_action,         {0} },
+    {      0, XK_Escape, pop_mode_action,         {0} },
 
-    { MODKEY, XK_b, spawn_browser, {.v = "--profile-directory=Personal"} },
-    { MODKEY, XK_p, spawn_browser, {.v = "--profile-directory=Play"}     },
-    { MODKEY, XK_m, spawn_browser, {.v = "--profile-directory=Music"}    },
-    { MODKEY, XK_r, spawn_browser, {.v = "--profile-directory=Research"} },
+    { MODKEY, XK_b, spawn_brave, {.v = "--profile-directory=Personal"} },
+    { MODKEY, XK_p, spawn_brave, {.v = "--profile-directory=Play"}     },
+    { MODKEY, XK_m, spawn_brave, {.v = "--profile-directory=Music"}    },
+    { MODKEY, XK_r, spawn_brave, {.v = "--profile-directory=Research"} },
+    { MODKEY, XK_w, spawn_brave, {.v = "--profile-directory=Work"}     },
 
-    {      0, XK_b, spawn_browser, {.v = "--profile-directory=Personal"} },
-    {      0, XK_p, spawn_browser, {.v = "--profile-directory=Play"}     },
-    {      0, XK_m, spawn_browser, {.v = "--profile-directory=Music"}    },
-    {      0, XK_r, spawn_browser, {.v = "--profile-directory=Research"} },
+    {      0, XK_b, spawn_brave, {.v = "--profile-directory=Personal"} },
+    {      0, XK_p, spawn_brave, {.v = "--profile-directory=Play"}     },
+    {      0, XK_m, spawn_brave, {.v = "--profile-directory=Music"}    },
+    {      0, XK_r, spawn_brave, {.v = "--profile-directory=Research"} },
+    {      0, XK_w, spawn_brave, {.v = "--profile-directory=Work"}     },
+
+
+    { MODKEY, XK_f, spawn_firefox, {.v = "Main" } },
+    {      0, XK_f, spawn_firefox, {.v = "Main" } },
 };
 
 static const Key surf_mode_keys[] = {
-    { MODKEY, XK_Escape, pop_mode,         {0} },
-    {      0, XK_Escape, pop_mode,         {0} },
+    { MODKEY, XK_Escape, pop_mode_action,         {0} },
+    {      0, XK_Escape, pop_mode_action,         {0} },
 
     { MODKEY, XK_s, spawn_surf, {.v = "~/.surf/cookies-personal.txt"} },
     {      0, XK_s, spawn_surf, {.v = "~/.surf/cookies-personal.txt"} },
@@ -198,6 +204,7 @@ static const Array keys[] = {
 /* click can be ClkTagBar, ClkLtSymbol, ClkStatusText, ClkWinTitle, ClkClientWin, or ClkRootWin */
 static Button buttons[] = {
     /* click                event mask      button          function        argument */
+    { ClkRootWin,           0,              Button1,        do_nothing,       {0} },
     { ClkWinTitle,          0,              Button2,        make_main_client, {0} },
     { ClkStatusText,        0,              Button1,        sigstatusbar,     {.i = 1} },
     { ClkStatusText,        0,              Button2,        sigstatusbar,     {.i = 2} },
