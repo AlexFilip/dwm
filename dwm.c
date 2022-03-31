@@ -181,7 +181,6 @@ struct Monitor {
     int topbar: 1;
 
     int mfact;
-    // int nmaster;
     int num;
     int bar_height;               /* bar geometry */
     int screen_x, screen_y, screen_width, screen_height;   /* screen size */

@@ -66,6 +66,9 @@ static const Layout layouts[] = {
     { MODKEY|ShiftMask,             KEY,      tag,            { .ui = 1 << (KEY - XK_1) } }, \
     { MODKEY|ControlMask|ShiftMask, KEY,      toggletag,      { .ui = 1 << (KEY - XK_1) } }
 
+// TODO: Make all commands use this
+#define Command(...) { .v = (const char*[]){ __VA_ARGS__, NULL } }
+
 /* helper for spawning shell commands in the pre dwm-5.0 fashion */
 #define ShellCommand(cmd) { .v = (const char*[]){ "/bin/sh", "-c", cmd, NULL } }
 
@@ -122,6 +125,7 @@ static const Key normal_mode_keys[] = {
     { MODKEY,                       XK_0,      view,             {.ui = ~0} },
     { MODKEY|ShiftMask,             XK_0,      tag,              {.ui = ~0} },
 
+    // Tag switching
     TAGKEYS(XK_1),
     TAGKEYS(XK_2),
     TAGKEYS(XK_3),
@@ -132,11 +136,18 @@ static const Key normal_mode_keys[] = {
     TAGKEYS(XK_8),
     TAGKEYS(XK_9),
 
-    { MODKEY|ShiftMask,             XK_q,      push_mode_action,        { .i = ModeQuit } },
-    { MODKEY,                       XK_y,      resize_window,    { .i = +1 } },
-    { MODKEY|ShiftMask,             XK_y,      resize_window,    { .i = -1 } },
+    { MODKEY|ShiftMask,             XK_q,      push_mode_action,               { .i = ModeQuit } },
+    { MODKEY,                       XK_y,      resize_window,                  { .i = +1 } },
+    { MODKEY|ShiftMask,             XK_y,      resize_window,                  { .i = -1 } },
     { MODKEY|ControlMask,           XK_y,      change_window_aspect_ratio,     { .i = -1 } },
     { MODKEY|ControlMask|ShiftMask, XK_y,      change_window_aspect_ratio,     { .i = +1 } },
+
+    // Screenshots
+    // TODO: Make a proper take_screenshot button that just takes the screenshot depending on the option passed in.
+    //       The current problem is the current window. I need to check if it's the same as client->window.
+    { MODKEY,             XK_a, spawn_action, ShellCommand("maim                                     $HOME/screenshots/$(date +%Y-%m-%d_%H:%M:%S).png") },
+    { MODKEY|ControlMask, XK_a, spawn_action, ShellCommand("maim --window $(xdotool getactivewindow) $HOME/screenshots/$(date +%Y-%m-%d_%H:%M:%S).png") },
+    { MODKEY|ShiftMask,   XK_a, spawn_action, ShellCommand("maim --select                            $HOME/screenshots/$(date +%Y-%m-%d_%H:%M:%S).png") },
 
     // Volume controls
     { 0, XF86XK_AudioRaiseVolume,   spawn_action, { .v = volume_up   } },
@@ -145,9 +156,9 @@ static const Key normal_mode_keys[] = {
     { 0, XF86XK_AudioMicMute,       spawn_action, { .v = mic_mute    } },
 
     // Screen brightness controls
-    // NOTE: This doesn't work because of the '~' in the path. I'll fix it later.
-    { 0, XF86XK_MonBrightnessUp,   spawn_action, { .v = brightness_up   } },
-    { 0, XF86XK_MonBrightnessDown, spawn_action, { .v = brightness_down } },
+    // TODO: Find out how to modify this from C
+    { 0, XF86XK_MonBrightnessUp,   spawn_action, ShellCommand("~/bin/backlight +1") },
+    { 0, XF86XK_MonBrightnessDown, spawn_action, ShellCommand("~/bin/backlight -1") },
 };
 
 static const Key quit_mode_keys[] = {
@@ -176,7 +187,6 @@ static const Key browser_mode_keys[] = {
     {      0, XK_m, spawn_brave, {.v = "--profile-directory=Music"}    },
     {      0, XK_r, spawn_brave, {.v = "--profile-directory=Research"} },
     {      0, XK_w, spawn_brave, {.v = "--profile-directory=Work"}     },
-
 
     { MODKEY, XK_f, spawn_firefox, {.v = "Main" } },
     {      0, XK_f, spawn_firefox, {.v = "Main" } },
