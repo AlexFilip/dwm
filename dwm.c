@@ -628,10 +628,6 @@ fn void arrange(int monitor_index) {
 
 fn int next_valid_monitor(int start_index) {
     int result = start_index;
-    if(all_monitors[start_index].is_valid) {
-        return start_index;
-    }
-    ++result;
     for (;result != start_index; ++result) {
         if(result == monitor_capacity) {
             result = 0;

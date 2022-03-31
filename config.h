@@ -80,24 +80,23 @@ static const char* volume_down[] = { "/usr/bin/pactl", "set-sink-volume", "@DEFA
 static const char* volume_mute[] = { "/usr/bin/pactl", "set-sink-mute",   "@DEFAULT_SINK@",   "toggle", NULL };
 static const char* mic_mute[]    = { "/usr/bin/pactl", "set-source-mute", "@DEFAULT_SOURCE@", "toggle", NULL };
 
-static const char* brightness_up[]   = { "/home/alex/bin/backlight" "+1", NULL };
-static const char* brightness_down[] = { "/home/alex/bin/backlight" "-1", NULL };
-
 /* commands */
-static char const       term[] = "st";
+static char const term[] = "st";
 #define TermCommand(...) { .v = (const char*[]){ term, __VA_ARGS__, NULL } }
 
 static const Key normal_mode_keys[] = {
     /* modifier                     key        function          argument */
-    { MODKEY,                       XK_space,  spawn_dmenu,      {0} },
+    { MODKEY,                       XK_space,  spawn_dmenu,     {0} },
     { MODKEY,                       XK_t,      spawn_action,    TermCommand(NULL) },
     { MODKEY,                       XK_e,      spawn_action,    TermCommand("nvim") },
 
     { MODKEY,                       XK_p,      spawn_action,    TermCommand("htop") },
+    { MODKEY,                       XK_d,      spawn_action,    Command("thunar")   },
+
     { MODKEY,                       XK_f,      toggle_layout,    {0} },
 
-    { MODKEY,                       XK_b,      push_mode_action,        {.i = ModeBrowser} },
-    { MODKEY,                       XK_s,      push_mode_action,        {.i = ModeSurfBrowser} },
+    { MODKEY,                       XK_b,      push_mode_action, {.i = ModeBrowser} },
+    { MODKEY,                       XK_s,      push_mode_action, {.i = ModeSurfBrowser} },
 
     { MODKEY,                       XK_h,      focusstack,       {.i = -1} },
     { MODKEY,                       XK_l,      focusstack,       {.i = +1} },
