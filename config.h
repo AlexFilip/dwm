@@ -98,19 +98,19 @@ static const Key normal_mode_keys[] = {
     { MODKEY,                       XK_b,      push_mode_action, {.i = ModeBrowser} },
     { MODKEY,                       XK_s,      push_mode_action, {.i = ModeSurfBrowser} },
 
-    { MODKEY,                       XK_h,      focusstack,       {.i = -1} },
-    { MODKEY,                       XK_l,      focusstack,       {.i = +1} },
-    { MODKEY,                       XK_j,      setmfact,         {.i = -5} },
-    { MODKEY,                       XK_k,      setmfact,         {.i = +5} },
+    { MODKEY,                       XK_h,      focusstack,       {.i = +1} },
+    { MODKEY,                       XK_l,      focusstack,       {.i = -1} },
+    { MODKEY,                       XK_j,      setmfact,         {.i = +5} },
+    { MODKEY,                       XK_k,      setmfact,         {.i = -5} },
 
+    // Floating windows
+    { MODKEY,                       XK_slash,  togglefloating,   {0} },
     { MODKEY|ShiftMask,             XK_j,      move_vert,        {.i = +1} },
     { MODKEY|ShiftMask,             XK_k,      move_vert,        {.i = -1} },
-
     { MODKEY|ShiftMask,             XK_h,      move_horiz,       {.i = -1} },
     { MODKEY|ShiftMask,             XK_l,      move_horiz,       {.i = +1} },
 
-    { MODKEY,                       XK_slash,  togglefloating,   {0} },
-
+    // 
     { MODKEY,                       XK_Return, make_main_client, {0} },
     { MODKEY,                       XK_Tab,    view,             {0} },
     { MODKEY,                       XK_w,      killclient,       {0} },

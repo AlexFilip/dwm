@@ -17,6 +17,13 @@
  * To understand everything else, start reading main().
  */
 
+/*
+ * FIX:
+ *  - When going from 2 screens to 1 the clients on the second screen don't move to the first. Then when switching back they can't be accessed with Mod+h/Mod+l.
+ *  - On startup, the bar does not take the full width of the screen and does not display the full status, especially on laptop.
+ *  - After bringing gap size down to 0 then bringing it back up (windows to full size then back down) the master client does not resize until swapped out.
+ */
+
 /* TODO:
  *  - Bring status bar into this project
  *    - NOTE: All of the status bar code will go into the "status" folder
@@ -491,8 +498,8 @@ fn void showhide(Client *client) {
 }
 
 fn void drawbar(int monitor_index) {
-    int bar_height  = global_bar_height;
-    int bottom_bar_height = 3;
+    int bar_height = global_bar_height;
+    int bottom_bar_height = bar_height/10;
     int text_height = global_bar_height - bottom_bar_height;
 
     Monitor *monitor = &all_monitors[monitor_index];
@@ -507,17 +514,17 @@ fn void drawbar(int monitor_index) {
     if (monitor_index == selected_monitor) {
         /* status is only drawn on selected monitor */
 
-        char *s, *text;
-        char ch;
-        for (text = s = status_text; *s; s++) {
-            if ((unsigned char)(*s) < ' ') {
-                ch = *s;
-                *s = '\0';
-                status_width += TextWidth(text) - lrpad;
-                *s = ch;
-                text = s + 1;
-            }
-        }
+        // char *s, *text;
+        // char ch;
+        // for (text = s = status_text; *s; s++) {
+        //     if ((unsigned char)(*s) < ' ') {
+        //         ch = *s;
+        //         *s = '\0';
+        //         status_width += TextWidth(text) - lrpad;
+        //         *s = ch;
+        //         text = s + 1;
+        //     }
+        // }
 
         status_width = TextWidth(status_text) - lrpad + 2;
         drw_text(&drw, window_width - status_width, 0, status_width, text_height, scheme[SchemeNorm], 0, status_text, 0);
@@ -1391,7 +1398,7 @@ fn void tile(int monitor_index) {
 
         // draw master window on left
         resize(client,
-               monitor->window_x,
+               monitor->window_x + monitor->window_width - master_width,
                monitor->window_y,
                master_width - (2*client->border_width),
                monitor->window_height - (2*client->border_width),
@@ -1404,7 +1411,7 @@ fn void tile(int monitor_index) {
         unsigned int height = (monitor->window_height - gap_size) / (num_clients - 1);
         for (; client != NULL; client = nexttiled(client->next)) {
             resize(client,
-                   monitor->window_x + master_width,
+                   monitor->window_x, //  + master_width,
                    monitor->window_y + ty,
                    monitor->window_width - master_width - (2*client->border_width),
                    height - (2*client->border_width) + gap_size,
